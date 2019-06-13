@@ -19,11 +19,17 @@ executable hiedb
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       base ^>=4.12.0.0
+  build-depends:       base
                      , ghc >= 8.7
                      , containers
                      , filepath
                      , directory
                      , mtl
+                     , sqlite-simple
+                     , time
+                     , text
+                     , optparse-applicative
+                     , terminal-size
+                     , bytestring
   hs-source-dirs:      src
   default-language:    Haskell2010
