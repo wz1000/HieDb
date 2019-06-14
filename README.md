@@ -27,7 +27,8 @@ Compile any package with ghc options `--write-ide-info` and optionally,
 $ cabal new-run exe:hiedb -- -D <db-loc> index <hiedir>
 ```
 
-You can omit `<db-loc>`
+You can omit `<db-loc>`, in which case it will default to the environment variable
+`HIEDB`, or if that is not defined, `~/.hiedb`
 
 ### Querying
 
