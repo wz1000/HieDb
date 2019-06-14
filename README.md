@@ -18,7 +18,7 @@ $ cabal new-build
 
 ### Generating .hie files
 
-Compile any package with ghc options `--write-ide-info` and optionally,
+Compile any package with ghc options `-fwrite-ide-info` and optionally,
 `-hiedir <dir>`. This will generate `.hie` files and save them in `<dir>`
 
 ### Indexing
