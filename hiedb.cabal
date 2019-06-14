@@ -31,5 +31,6 @@ executable hiedb
                      , optparse-applicative
                      , terminal-size
                      , bytestring
+                     , semigroups
   hs-source-dirs:      src
   default-language:    Haskell2010

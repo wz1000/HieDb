@@ -13,6 +13,7 @@ import Module
 import NameCache
 import OccName
 import UniqSupply
+import SrcLoc
 
 
 import qualified Data.Map as M
@@ -44,11 +45,14 @@ import Control.Monad.Reader
 
 import Data.Char
 import Data.Maybe
+import Data.Either
+import Data.Foldable
 import Data.List (intercalate)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Coerce
 import Data.Semigroup
 
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS
 
 import Database.SQLite.Simple
 import Database.SQLite.Simple.ToField
@@ -232,7 +236,7 @@ data HieDbConf =
 initConn :: Connection -> IO ()
 initConn conn = do
   execute_ conn "CREATE TABLE IF NOT EXISTS refs (src TEXT, srcMod TEXT, occ TEXT, mod TEXT, unit TEXT, file TEXT, sl INTEGER, sc INTEGER, el INTEGER, ec INTEGER)"
-  execute_ conn "CREATE TABLE IF NOT EXISTS mods (hieFile TEXT PRIMARY KEY ON CONFLICT REPLACE, mod TEXT, unit TEXT, time TEXT, CONSTRAINT modid UNIQUE (mod, unit))"
+  execute_ conn "CREATE TABLE IF NOT EXISTS mods (hieFile TEXT PRIMARY KEY ON CONFLICT REPLACE, mod TEXT, unit TEXT, time TEXT, CONSTRAINT modid UNIQUE (mod, unit) ON CONFLICT REPLACE)"
 
 main :: IO ()
 main = do
@@ -267,7 +271,9 @@ data Command
   | Index [FilePath]
   | NameRefs String (Maybe ModuleName) (Maybe UnitId)
   | TypeRefs String (Maybe ModuleName) (Maybe UnitId)
-  | Cat ModuleName (Maybe UnitId)
+  | Cat (Either FilePath ModuleName) (Maybe UnitId)
+  | RefsAtPoint (Either FilePath ModuleName) (Maybe UnitId) (Int,Int) (Maybe (Int,Int))
+  | TypeAtPoint (Either FilePath ModuleName) (Maybe UnitId) (Int,Int) (Maybe (Int,Int))
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
 progParseInfo db = info (progParser db <**> helper)
@@ -300,9 +306,20 @@ cmdParser
                                          <*> optional (mkModuleName <$> strArgument (metavar "MODULE"))
                                          <*> optional (stringToUnitId <$> strArgument (metavar "UNITID")))
                           $ progDesc "Lookup references of type MODULE.NAME")
-  <> command "cat" (info (Cat <$> (mkModuleName <$> strArgument (metavar "MODULE"))
+  <> command "cat" (info (Cat <$> moduleOrHieFile
                               <*> optional (stringToUnitId <$> strArgument (metavar "UNITID")))
                           $ progDesc "Dump contents of MODULE as stored in the hiefile")
+  <> command "point-refs"
+        (info (RefsAtPoint <$> moduleOrHieFile
+                           <*> optional (stringToUnitId <$> strOption (short 'u' <> long "unit-id" <> metavar "UNITID"))
+                           <*> ((,) <$> argument auto (metavar "SLINE") <*> argument auto (metavar "SCOL"))
+                           <*> optional ((,) <$> argument auto (metavar "ELINE") <*> argument auto (metavar "ECOL")))
+              $ progDesc "Dump contents of MODULE as stored in the hiefile")
+
+moduleOrHieFile :: Parser (Either FilePath ModuleName)
+moduleOrHieFile =
+      (Left <$> strOption (long "hiefile" <> short 'f' <> metavar "HIEFILE"))
+  <|> (Right . mkModuleName <$> strArgument (metavar "MODULE"))
 
 progress :: Int -> (FilePath -> DbMonad a) -> FilePath -> DbMonad a
 progress l act f = do
@@ -317,17 +334,26 @@ progress l act f = do
   modify' (\s -> s {done = cur + 1})
   return x
 
-resolveUnitId :: Connection -> ModuleName -> IO UnitId
+data UnresolvedUnitId
+  = NotIndexed ModuleName
+  | AmbiguousUnitId (NonEmpty UnitId)
+
+reportAmbiguousErr :: Either UnresolvedUnitId UnitId -> IO UnitId
+reportAmbiguousErr (Right x) = return x
+reportAmbiguousErr (Left (NotIndexed mn)) = do
+  putStrLn $ unwords $ ["Module",moduleNameString mn, "not indexed."]
+  exitFailure
+reportAmbiguousErr (Left (AmbiguousUnitId xs)) = do
+  putStrLn $ unwords $ ["UnitId could be any of:",intercalate "," (map show $ toList xs)]
+  exitFailure
+
+resolveUnitId :: Connection -> ModuleName -> IO (Either UnresolvedUnitId UnitId)
 resolveUnitId conn mn = do
   luid <- query conn "SELECT unit FROM mods WHERE mod = ?" (Only mn)
   case (luid :: [Only UnitId]) of
-    [] -> do
-      putStrLn $ unwords ["Module", moduleNameString mn, "isn't indexed"]
-      exitFailure
-    [x] -> return $ fromOnly x
-    xs -> do
-      putStrLn $ "Please specify the unitid, it could be any of: " ++ intercalate ", " (map (show . fromOnly) xs)
-      exitFailure
+    [] -> return $ Left $ NotIndexed mn
+    [x] -> return $ Right $ fromOnly x
+    (x:xs) -> return $ Left $ AmbiguousUnitId $ coerce $ x :| xs
 
 reportRefs :: [RefRow] -> IO ()
 reportRefs xs = forM_ xs $ \x -> do
@@ -354,6 +380,17 @@ search conn occ (Just mn) (Just uid) =
 search conn occ _ _=
   query conn "SELECT * FROM refs WHERE occ = ?" (Only occ)
 
+lookupHieFile :: Connection -> ModuleName -> UnitId -> IO (Maybe HieModuleRow)
+lookupHieFile conn mn uid = do
+  files <- query conn "SELECT * FROM mods WHERE mod = ? AND unit = ?" (mn, uid)
+  case files of
+    [] -> return Nothing
+    [x] -> return $ Just x
+    xs ->
+      error $ "DB invariant violated, (mod,unit) in mods not unique: "
+            ++ show (moduleNameString mn, uid) ++ ". Entries: "
+            ++ intercalate ", " (map hieModuleHieFile xs)
+
 runCommand :: Options -> Command -> IO ()
 runCommand opts c = withConnection (database opts) $ \conn -> do
   when (trace opts) $
@@ -366,9 +403,11 @@ runCommand opts c = withConnection (database opts) $ \conn -> do
       files <- concat <$> mapM getHieFilesIn dirs
       nc <- makeNc
       wsize <- maybe 80 width <$> size
+      let progress' = if quiet opts then flip const else progress
       execDbM (Env conn opts) (DbState (length files) 0 nc) $
-        mapM_ (progress wsize addRefsFrom) files
-      putStrLn "\nCompleted!"
+        mapM_ (progress' wsize addRefsFrom) files
+      unless (quiet opts) $
+        putStrLn "\nCompleted!"
     go conn (TypeRefs typ mn muid) = do
       let occ = mkOccName tcClsName typ
       refs <- search conn occ mn muid
@@ -378,16 +417,48 @@ runCommand opts c = withConnection (database opts) $ \conn -> do
       let occ = mkOccName ns nm
       refs <- search conn occ mn muid
       reportRefs refs
-    go conn (Cat mn muid) = do
-      uid <- maybe (resolveUnitId conn mn) return muid
-      files <- query conn "SELECT * FROM mods WHERE mod = ? AND unit = ?" (mn, uid)
-      case files of
-        [] -> do
-          putStrLn "No such module indexed"
-          exitFailure
-        [x] -> do
-          nc <- makeNc
-          flip evalStateT (DbState 0 0 nc) $ withHieFile (hieModuleHieFile x) (liftIO . BS.putStrLn . hie_hs_src)
-        xs -> do
-          putStrLn $ "Please specify the unitid, it could be any of: " ++ intercalate ", " (map (show . hieUnit) xs)
-          exitFailure
+    go conn (Cat mn muid) = hieFileCommand conn opts mn muid (liftIO . BS.putStrLn . hie_hs_src)
+    go conn (RefsAtPoint mn muid (sl, sc) mep) = hieFileCommand conn opts mn muid $ \hf -> liftIO $ do
+      let sloc fs = mkRealSrcLoc fs sl sc
+          eloc fs = case mep of
+            Nothing -> sloc fs
+            Just (el,ec) -> mkRealSrcLoc fs el ec
+          sp fs = mkRealSrcSpan (sloc fs) (eloc fs)
+          names = concat $ flip M.mapWithKey (getAsts $ hie_asts hf) $ \fs ast ->
+            case selectSmallestContaining (sp fs) ast of
+              Nothing -> []
+              Just ast' -> rights $ M.keys $ nodeIdentifiers $ nodeInfo ast'
+      forM_ names $ \name -> do
+        putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show(sl,sc),"is used in:"]
+        case nameModule_maybe name of
+          Just mod -> do
+            reportRefs =<< search conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
+          Nothing -> do
+            let refmap = generateReferencesMap (getAsts $ hie_asts hf)
+                refs = map (toRef . fst) $ fromMaybe [] $ M.lookup (Right name) refmap
+                toRef sp = RefRow { refSrcMod = moduleName $ hie_module hf
+                                  , refSLine = srcSpanStartLine sp
+                                  , refSCol = srcSpanStartCol sp
+                                  , refELine = srcSpanEndLine sp
+                                  , refECol = srcSpanEndCol sp
+                                  }
+            reportRefs refs
+
+hieFileCommand :: Connection -> Options -> Either FilePath ModuleName -> Maybe UnitId -> (HieFile -> IO ()) -> IO ()
+hieFileCommand conn opts (Left x) _ f = do
+  nc <- makeNc
+  execDbM (Env conn opts)(DbState 0 0 nc) $ do
+    addRefsFrom x
+    withHieFile x (liftIO . f)
+hieFileCommand conn opts (Right mn) muid f = do
+  uid <- maybe (reportAmbiguousErr =<< resolveUnitId conn mn) return muid
+  mFile <- lookupHieFile conn mn uid
+  case mFile of
+    Nothing -> do
+      putStrLn "No such module indexed"
+      exitFailure
+    Just x -> do
+      nc <- makeNc
+      execDbM (Env conn opts)(DbState 0 0 nc) $ do
+        addRefsFrom (hieModuleHieFile x)
+        withHieFile (hieModuleHieFile x) (liftIO . f)
