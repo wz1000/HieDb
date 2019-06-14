@@ -14,7 +14,10 @@ import NameCache
 import OccName
 import UniqSupply
 import SrcLoc
-
+import DynFlags
+import Platform
+import Config
+import Fingerprint
 
 import qualified Data.Map as M
 import Data.Map (Map)
@@ -273,7 +276,7 @@ data Command
   | TypeRefs String (Maybe ModuleName) (Maybe UnitId)
   | Cat (Either FilePath ModuleName) (Maybe UnitId)
   | RefsAtPoint (Either FilePath ModuleName) (Maybe UnitId) (Int,Int) (Maybe (Int,Int))
-  | TypeAtPoint (Either FilePath ModuleName) (Maybe UnitId) (Int,Int) (Maybe (Int,Int))
+  | TypesAtPoint (Either FilePath ModuleName) (Maybe UnitId) (Int,Int) (Maybe (Int,Int))
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
 progParseInfo db = info (progParser db <**> helper)
@@ -301,20 +304,29 @@ cmdParser
   <> command "name-refs" (info (NameRefs <$> (strArgument (metavar "NAME"))
                                          <*> optional (mkModuleName <$> strArgument (metavar "MODULE"))
                                          <*> optional (stringToUnitId <$> strArgument (metavar "UNITID")))
-                          $ progDesc "Lookup references of value MODULE.NAME")
+                         $ progDesc "Lookup references of value MODULE.NAME")
   <> command "type-refs" (info (TypeRefs <$> (strArgument (metavar "NAME"))
                                          <*> optional (mkModuleName <$> strArgument (metavar "MODULE"))
                                          <*> optional (stringToUnitId <$> strArgument (metavar "UNITID")))
-                          $ progDesc "Lookup references of type MODULE.NAME")
-  <> command "cat" (info (Cat <$> moduleOrHieFile
-                              <*> optional (stringToUnitId <$> strArgument (metavar "UNITID")))
-                          $ progDesc "Dump contents of MODULE as stored in the hiefile")
+                         $ progDesc "Lookup references of type MODULE.NAME")
+  <> command "cat" (info (Cat <$> moduleOrHieFile <*> maybeUnitId)
+                         $ progDesc "Dump contents of MODULE as stored in the hiefile")
   <> command "point-refs"
         (info (RefsAtPoint <$> moduleOrHieFile
-                           <*> optional (stringToUnitId <$> strOption (short 'u' <> long "unit-id" <> metavar "UNITID"))
+                           <*> maybeUnitId
                            <*> ((,) <$> argument auto (metavar "SLINE") <*> argument auto (metavar "SCOL"))
                            <*> optional ((,) <$> argument auto (metavar "ELINE") <*> argument auto (metavar "ECOL")))
-              $ progDesc "Dump contents of MODULE as stored in the hiefile")
+              $ progDesc "Find references for symbol at point/span")
+  <> command "point-types"
+        (info (TypesAtPoint <$> moduleOrHieFile
+                            <*> maybeUnitId
+                            <*> ((,) <$> argument auto (metavar "SLINE") <*> argument auto (metavar "SCOL"))
+                            <*> optional ((,) <$> argument auto (metavar "ELINE") <*> argument auto (metavar "ECOL")))
+              $ progDesc "List types of ast at point/span")
+
+maybeUnitId :: Parser (Maybe UnitId)
+maybeUnitId =
+  optional (stringToUnitId <$> strOption (short 'u' <> long "unit-id" <> metavar "UNITID"))
 
 moduleOrHieFile :: Parser (Either FilePath ModuleName)
 moduleOrHieFile =
@@ -443,6 +455,40 @@ runCommand opts c = withConnection (database opts) $ \conn -> do
                                   , refECol = srcSpanEndCol sp
                                   }
             reportRefs refs
+    go conn (TypesAtPoint mn muid (sl, sc) mep) = hieFileCommand conn opts mn muid $ \hf -> liftIO $ do
+      let sloc fs = mkRealSrcLoc fs sl sc
+          eloc fs = case mep of
+            Nothing -> sloc fs
+            Just (el,ec) -> mkRealSrcLoc fs el ec
+          sp fs = mkRealSrcSpan (sloc fs) (eloc fs)
+          types' = concat $ flip M.mapWithKey (getAsts $ hie_asts hf) $ \fs ast ->
+            case selectSmallestContaining (sp fs) ast of
+              Nothing -> []
+              Just ast' -> nodeType $ nodeInfo ast'
+          types = map (flip recoverFullType $ hie_types hf) types'
+      forM_ types $ \typ -> do
+        putStrLn $ renderHieType fakeDynFlags typ
+
+-- Stolen from digitalasset/haskell-ide-core's Development.IDE.UtilGHC
+fakeDynFlags :: DynFlags
+fakeDynFlags = defaultDynFlags settings ([], [])
+    where
+        settings = Settings
+                   { sTargetPlatform = platform
+                   , sPlatformConstants = platformConstants
+                   , sProgramName = "ghc"
+                   , sProjectVersion = cProjectVersion
+                   , sOpt_P_fingerprint = fingerprint0
+                   }
+        platform = Platform
+          { platformWordSize=8
+          , platformOS=OSUnknown
+          , platformUnregisterised=True
+          }
+        platformConstants = PlatformConstants
+          { pc_DYNAMIC_BY_DEFAULT=False
+          , pc_WORD_SIZE=8
+          }
 
 hieFileCommand :: Connection -> Options -> Either FilePath ModuleName -> Maybe UnitId -> (HieFile -> IO ()) -> IO ()
 hieFileCommand conn opts (Left x) _ f = do
