@@ -66,6 +66,26 @@ withHieFile path act = do
   putNc nc'
   act (hie_file_result hiefile)
 
+tryAll :: Monad m => (a -> m (Either b c)) -> [a] -> m (Maybe c)
+tryAll _ [] = return Nothing
+tryAll f (x:xs) = do
+  eres <- f x
+  case eres of
+    Right res -> return (Just res)
+    Left _ -> tryAll f xs
+
+-- | Given the path to a HieFile, it tries to find the SrcSpan of an External name in
+-- it by loading it and then looking for the name in NameCache
+findDefInFile :: OccName -> Module -> FilePath -> IO (Either HieDbErr (RealSrcSpan,Module))
+findDefInFile occ mdl file = do
+  nc <- makeNc
+  nc' <- execDbM nc $ withHieFile file (const $ return ())
+  case lookupOrigNameCache (nsNames nc') mdl occ of
+    Just name -> case nameSrcSpan name of
+      RealSrcSpan sp -> return $ Right (sp, mdl)
+      UnhelpfulSpan msg -> return $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
+    Nothing -> return $ Left $ NameNotFound occ mdl
+
 pointCommand :: HieFile -> (Int, Int) -> Maybe (Int, Int) -> (HieAST TypeIndex -> a) -> [a]
 pointCommand hf (sl,sc) mep k =
     catMaybes $ M.elems $ flip M.mapWithKey (getAsts $ hie_asts hf) $ \fs ast ->
@@ -105,9 +125,10 @@ genRefRow path hf = genRows $ generateRefs $ getAsts $ hie_asts hf
     genRows = mapMaybe go
     go ((Right name, sp))
       | Just mod <- nameModule_maybe name = Just $
-          RefRow path smod occ (moduleName mod) (moduleUnitId mod) file sl sc el ec
+          RefRow path smod sunit occ (moduleName mod) (moduleUnitId mod) file sl sc el ec
           where
             smod = moduleName $ hie_module hf
+            sunit = moduleUnitId $ hie_module hf
             occ = nameOccName name
             file = FS.unpackFS $ srcSpanFile sp
             sl = srcSpanStartLine sp

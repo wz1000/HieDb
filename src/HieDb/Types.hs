@@ -4,6 +4,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module HieDb.Types where
 
 import Prelude hiding (mod)
@@ -87,6 +88,7 @@ data RefRow
   = RefRow
   { refSrc :: FilePath
   , refSrcMod :: ModuleName
+  , refSrcUnit :: UnitId
   , refNameOcc :: OccName
   , refNameMod :: ModuleName
   , refNameUnit :: UnitId
@@ -98,10 +100,10 @@ data RefRow
   }
 
 instance ToRow RefRow where
-  toRow (RefRow a b c d e f g h i j) = toRow (a,b,c,d,e,f,g,h,i,j)
+  toRow (RefRow a b c d e f g h i j k) = toRow ((a,b,c,d,e,f):.(g,h,i,j,k))
 
 instance FromRow RefRow where
-  fromRow = RefRow <$> field <*> field <*> field <*> field <*> field
+  fromRow = RefRow <$> field <*> field <*> field <*> field <*> field <*> field
                    <*> field <*> field <*> field <*> field <*> field
 
 class Monad m => NameCacheMonad m where
@@ -116,8 +118,14 @@ deriving instance MonadIO m => MonadIO (DbMonadT m)
 
 type DbMonad = DbMonadT IO
 
-execDbM :: NameCache -> DbMonad a -> IO a
-execDbM nc x = flip evalStateT nc $ runDbMonad x
+evalDbM :: NameCache -> DbMonad a -> IO a
+evalDbM nc x = flip evalStateT nc $ runDbMonad x
+
+execDbM :: NameCache -> DbMonad a -> IO NameCache
+execDbM nc x = flip execStateT nc $ runDbMonad x
+
+runDbM :: NameCache -> DbMonad a -> IO (a,NameCache)
+runDbM nc x = flip runStateT nc $ runDbMonad x
 
 instance Monad m => NameCacheMonad (DbMonadT m) where
   getNc = DbMonadT get
@@ -126,3 +134,5 @@ instance Monad m => NameCacheMonad (DbMonadT m) where
 data HieDbErr
   = NotIndexed ModuleName (Maybe UnitId)
   | AmbiguousUnitId (NonEmpty UnitId)
+  | NameNotFound OccName Module
+  | NameUnhelpfulSpan Name String
