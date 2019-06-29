@@ -26,7 +26,7 @@ main = defaultMainWithHooks simpleUserHooks {
   where
     defaultPostConf :: Args -> ConfigFlags -> PackageDescription -> LocalBuildInfo -> IO ()
     defaultPostConf args flags pkgdescr lbi = do
-      libdir_ <- rawSystemProgramStdoutConf (fromFlag (configVerbosity flags))
+      libdir_ <- getDbProgramOutput (fromFlag (configVerbosity flags))
                      ghcProgram (withPrograms lbi) ["--print-libdir"]
       let libdir = reverse $ dropWhile isSpace $ reverse libdir_
 
