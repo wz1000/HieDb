@@ -4,7 +4,7 @@ version:             0.1.0.0
 synopsis:            Generates a references DB from .hie files
 -- description:
 -- bug-reports:
-license:             AGPL-3.0-only
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Zubin Duggal
 maintainer:          zubin@cmi.ac.in
