@@ -25,11 +25,11 @@ executable hiedb
                      , optparse-applicative
                      , terminal-size
                      , bytestring
-                     , hie-db
+                     , hiedb
   ghc-options: -Wall
   default-language:    Haskell2010
 
-library hie-db
+library
   hs-source-dirs:      src
   exposed-modules:     HieDb, HieDb.Utils, HieDb.Create, HieDb.Query, HieDb.Types
   -- other-modules:

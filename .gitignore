@@ -1,0 +1,3 @@
+.ghc.env*
+dist-newstyle/
+cabal.project.local*
