@@ -107,7 +107,7 @@ withTarget conn (Right (mn, muid)) f = do
 declRefs :: HieDb -> IO ()
 declRefs ( getConn -> conn ) = do
   declRefs <-
-    query_ conn "select decls.hieFile, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, ref_decl.hieFile, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ from decls join refs on refs.srcMod = decls.mod and refs.srcUnit = decls.unit join decls ref_decl on ref_decl.mod = refs.srcMod and ref_decl.unit = refs.unit and ref_decl.occ = refs.occ where ((refs.sl > decls.sl) or (refs.sl = decls.sl and refs.sc > decls.sc)) and ((refs.el < decls.el) or (refs.el = decls.el and refs.ec <= decls.ec))"
+    query_ conn "select decls.hieFile, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, ref_decl.hieFile, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ from decls join refs on refs.srcMod = decls.mod and refs.srcUnit = decls.unit join decls ref_decl on ref_decl.mod = refs.mod and ref_decl.unit = refs.unit and ref_decl.occ = refs.occ where ((refs.sl > decls.sl) or (refs.sl = decls.sl and refs.sc > decls.sc)) and ((refs.el < decls.el) or (refs.el = decls.el and refs.ec <= decls.ec))"
   let
     graph :: Graph ( String, Int, Int, Int, Int, String )
     graph = edges ( map ( \( x :. y ) -> ( x, y ) ) declRefs )
