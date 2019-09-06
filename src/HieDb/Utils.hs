@@ -162,8 +162,8 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
                 , declFile = FS.unpackFS $ srcSpanFile nodeSpan
                 , declSLine = srcSpanStartLine nodeSpan
                 , declSCol = srcSpanStartCol nodeSpan
-                , declELine = srcSpanStartLine nodeSpan
-                , declECol = srcSpanStartCol nodeSpan
+                , declELine = srcSpanEndLine nodeSpan
+                , declECol = srcSpanEndCol nodeSpan
                 }
         , foldMap declRows nodeChildren
         ]
