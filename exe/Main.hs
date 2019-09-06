@@ -85,6 +85,7 @@ data Command
   | TypesAtPoint HieTarget (Int,Int) (Maybe (Int,Int))
   | DefsAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | InfoAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
+  | RefGraph
 
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
@@ -156,6 +157,7 @@ cmdParser
                             <*> (posParser 'S')
                             <*> optional (posParser 'E'))
               $ progDesc "Print name, module name, unit id for symbol at point/span")
+  <> command "ref-graph" (info (pure RefGraph) $ progDesc "Generate a reachability graph")
 
 type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
@@ -308,6 +310,9 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
       dynFlags <- dynFlagsForPrinting
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
         (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
+    go conn RefGraph =
+      declRefs conn
+
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do

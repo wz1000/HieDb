@@ -7,6 +7,9 @@
 {-# LANGUAGE ViewPatterns #-}
 module HieDb.Query where
 
+import Algebra.Graph (Graph, edges)
+import Algebra.Graph.Export.Dot
+
 import GHC
 import HieTypes
 import Name
@@ -100,3 +103,12 @@ withTarget conn (Right (mn, muid)) f = do
             file <- liftIO $ canonicalizePath (hieModuleHieFile x)
             addRefsFrom conn file
             Right <$> withHieFile file (return . f)
+
+declRefs :: HieDb -> IO ()
+declRefs ( getConn -> conn ) = do
+  declRefs <-
+    query_ conn "select decls.hieFile, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, ref_decl.hieFile, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ from decls join refs on refs.srcMod = decls.mod and refs.srcUnit = decls.unit join decls ref_decl on ref_decl.mod = refs.srcMod and ref_decl.unit = refs.unit and ref_decl.occ = refs.occ where ((refs.sl > decls.sl) or (refs.sl = decls.sl and refs.sc > decls.sc)) and ((refs.el < decls.el) or (refs.el = decls.el and refs.ec < decls.ec)) and decls.unit in ('hiedb-0.1.0.0-inplace', 'main')"
+  let
+    graph :: Graph ( String, Int, Int, Int, Int, String )
+    graph = edges ( map ( \( x :. y ) -> ( x, y ) ) declRefs )
+  writeFile "refs.dot" ( export (defaultStyle (\(a, b, c, d, e, f) -> intercalate ":" (a : map show [b, c, d, e]) <> " " <> f)) graph )
