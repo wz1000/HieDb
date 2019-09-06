@@ -106,6 +106,26 @@ instance FromRow RefRow where
   fromRow = RefRow <$> field <*> field <*> field <*> field <*> field <*> field
                    <*> field <*> field <*> field <*> field <*> field
 
+data DeclRow
+  = DeclRow
+  { declSrc :: FilePath
+  , declMod :: ModuleName
+  , declUnit :: UnitId
+  , declNameOcc :: OccName
+  , declFile :: FilePath
+  , declSLine :: Int
+  , declSCol :: Int
+  , declELine :: Int
+  , declECol :: Int
+  }
+
+instance ToRow DeclRow where
+  toRow (DeclRow a b c d e f g h i) = toRow ((a,b,c,d,e,f):.(g,h,i))
+
+instance FromRow DeclRow where
+  fromRow = DeclRow <$> field <*> field <*> field <*> field <*> field <*> field
+                   <*> field <*> field <*> field
+
 class Monad m => NameCacheMonad m where
   getNc :: m NameCache
   putNc :: NameCache -> m ()

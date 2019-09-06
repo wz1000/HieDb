@@ -1,9 +1,10 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TupleSections #-}
 module HieDb.Utils where
 
 import Prelude hiding (mod)
@@ -20,6 +21,7 @@ import DynFlags
 import SysTools
 import GHC.Paths (libdir)
 
+import qualified Data.Set as S
 import qualified Data.Map as M
 
 import qualified FastString as FS
@@ -29,8 +31,10 @@ import System.FilePath
 
 import Control.Monad.IO.Class
 
+import Control.Monad
 import Data.Char
 import Data.Maybe
+import Data.Monoid
 
 import HieDb.Types
 
@@ -137,3 +141,33 @@ genRefRow path hf = genRows $ generateRefs $ getAsts $ hie_asts hf
             ec = srcSpanEndCol sp
     go _ = Nothing
 
+genDeclRow :: FilePath -> HieFile -> [DeclRow]
+genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
+  where
+
+    declRows Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
+      concat
+        [ do
+            guard ( FS.mkFastString "FunBind" `S.member` S.map fst nodeAnnotations )
+
+            First ( Just declName ) <-
+              return ( foldMap findDeclName nodeChildren )
+
+            return
+              DeclRow
+                { declSrc = path
+                , declMod = moduleName $ hie_module hf
+                , declUnit = moduleUnitId $ hie_module hf
+                , declNameOcc = nameOccName declName
+                , declFile = FS.unpackFS $ srcSpanFile nodeSpan
+                , declSLine = srcSpanStartLine nodeSpan
+                , declSCol = srcSpanStartCol nodeSpan
+                , declELine = srcSpanStartLine nodeSpan
+                , declECol = srcSpanStartCol nodeSpan
+                }
+        , foldMap declRows nodeChildren
+        ]
+
+
+    findDeclName HieTypes.Node{ nodeInfo = HieTypes.NodeInfo{ nodeIdentifiers } } =
+      foldMap ( either ( const mempty ) ( First . Just ) ) ( M.keys nodeIdentifiers )
