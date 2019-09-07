@@ -175,13 +175,13 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
       if any ( `S.member` S.map fst nodeAnnotations ) deadEnds then
         []
 
-      else if any ( `S.member` S.map fst nodeAnnotations ) annotations then
-        let
-          declName =
-            case getConst ( levelorder findDeclName ( identifierTree n ) ) of
-              First Nothing           -> error ( show nodeSpan )
-              First ( Just declName ) -> declName
+      else if any ( `S.member` S.map fst nodeAnnotations ) annotations then do
+        declName <-
+          case getConst ( levelorder findDeclName ( identifierTree n ) ) of
+            First Nothing           -> []
+            First ( Just declName ) -> pure declName
 
+        let
           later =
             if containsDeclarations nodeAnnotations then
               foldMap declRows nodeChildren
@@ -189,7 +189,6 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
             else
               []
 
-        in
         DeclRow
           { declSrc = path
           , declMod = moduleName $ hie_module hf
