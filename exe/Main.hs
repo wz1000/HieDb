@@ -40,6 +40,7 @@ import qualified Data.ByteString.Char8 as BS
 import Options.Applicative
 
 import HieDb
+import HieDb.Dump
 
 main :: IO ()
 main = do
@@ -86,6 +87,7 @@ data Command
   | DefsAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | InfoAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | RefGraph
+  | Dump FilePath
 
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
@@ -158,6 +160,7 @@ cmdParser
                             <*> optional (posParser 'E'))
               $ progDesc "Print name, module name, unit id for symbol at point/span")
   <> command "ref-graph" (info (pure RefGraph) $ progDesc "Generate a reachability graph")
+  <> command "dump" (info (Dump <$> strArgument (metavar "HIE")) $ progDesc "Dump a HIE AST")
 
 type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
@@ -312,6 +315,8 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
         (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
     go conn RefGraph =
       declRefs conn
+    go _ (Dump path) =
+      dump path
 
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
