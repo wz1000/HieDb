@@ -33,6 +33,7 @@ import Control.Monad.IO.Class
 
 import Control.Monad
 import Data.Char
+import Data.Function
 import Data.Maybe
 import Data.Monoid
 
@@ -145,28 +146,47 @@ genDeclRow :: FilePath -> HieFile -> [DeclRow]
 genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
   where
 
-    declRows Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
-      concat
-        [ do
-            guard ( FS.mkFastString "FunBind" `S.member` S.map fst nodeAnnotations )
+    annotations =
+      [ "FunBind"
+      , "DataDecl"
+      , "TypeSig"
+      , "ConDeclH98"
+      ]
+        & map FS.mkFastString
+        & S.fromList
 
-            First ( Just declName ) <-
-              return ( foldMap findDeclName nodeChildren )
+    containsDeclarations nodeAnnotations =
+      any ( `S.member` S.map fst nodeAnnotations) [ "DataDecl" ]
 
-            return
-              DeclRow
-                { declSrc = path
-                , declMod = moduleName $ hie_module hf
-                , declUnit = moduleUnitId $ hie_module hf
-                , declNameOcc = nameOccName declName
-                , declFile = FS.unpackFS $ srcSpanFile nodeSpan
-                , declSLine = srcSpanStartLine nodeSpan
-                , declSCol = srcSpanStartCol nodeSpan
-                , declELine = srcSpanEndLine nodeSpan
-                , declECol = srcSpanEndCol nodeSpan
-                }
-        , foldMap declRows nodeChildren
-        ]
+    declRows n@Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
+      if not ( S.null ( S.intersection annotations ( traceShowId ( S.map fst nodeAnnotations ) ) ) ) then
+        let
+          First ( Just declName ) =
+            findDeclName n <> foldMap findDeclName nodeChildren
+
+          later =
+            if containsDeclarations nodeAnnotations then
+              foldMap declRows nodeChildren
+
+            else
+              []
+
+        in
+        DeclRow
+          { declSrc = path
+          , declMod = moduleName $ hie_module hf
+          , declUnit = moduleUnitId $ hie_module hf
+          , declNameOcc = nameOccName declName
+          , declFile = FS.unpackFS $ srcSpanFile nodeSpan
+          , declSLine = srcSpanStartLine nodeSpan
+          , declSCol = srcSpanStartCol nodeSpan
+          , declELine = srcSpanEndLine nodeSpan
+          , declECol = srcSpanEndCol nodeSpan
+          }
+          : later
+
+      else
+        foldMap declRows nodeChildren
 
 
     findDeclName HieTypes.Node{ nodeInfo = HieTypes.NodeInfo{ nodeIdentifiers } } =
