@@ -5,28 +5,31 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module HieDb.Query where
 
-import Algebra.Graph (Graph, edges)
-import Algebra.Graph.Export.Dot
+import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, postSet, vertexSet)
+import           Algebra.Graph.Export.Dot
 
-import GHC
-import HieTypes
-import Name
+import           GHC
+import           HieTypes
+import           Name
 
-import System.Directory
+import           System.Directory
 
-import Control.Monad.IO.Class
+import           Control.Monad.IO.Class
 
-import Data.List (intercalate)
-import Data.List.NonEmpty (NonEmpty(..))
-import Data.Coerce
+import           Data.List (intercalate)
+import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Coerce
+import           Data.Set (Set)
+import qualified Data.Set as Set
 
-import Database.SQLite.Simple
+import           Database.SQLite.Simple
 
-import HieDb.Types
-import HieDb.Utils
-import HieDb.Create
+import           HieDb.Types
+import           HieDb.Utils
+import           HieDb.Create
 
 getAllIndexedMods :: HieDb -> IO [HieModuleRow]
 getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
@@ -109,6 +112,16 @@ declRefs ( getConn -> conn ) = do
   drs <-
     query_ conn "select decls.hieFile, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, ref_decl.hieFile, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ from decls join refs on refs.srcMod = decls.mod and refs.srcUnit = decls.unit join decls ref_decl on ref_decl.mod = refs.mod and ref_decl.unit = refs.unit and ref_decl.occ = refs.occ where ((refs.sl > decls.sl) or (refs.sl = decls.sl and refs.sc > decls.sc)) and ((refs.el < decls.el) or (refs.el = decls.el and refs.ec <= decls.ec))"
   let
-    graph :: Graph ( String, Int, Int, Int, Int, String )
+    graph :: AdjacencyMap ( String, Int, Int, Int, Int, String )
     graph = edges ( map ( \( x :. y ) -> ( x, y ) ) drs )
   writeFile "refs.dot" ( export (defaultStyle (\(a, b, c, d, e, f) -> intercalate ":" (a : map show [b, c, d, e]) <> " " <> f)) graph )
+
+reachable :: forall a. Ord a => a -> AdjacencyMap a -> Set a
+reachable a m = go Set.empty [a]
+  where
+    go :: Set a -> [a] -> Set a
+    go s []       = s
+    go s (x : xs) = go (Set.insert x s) $ xs ++ [y | y <- Set.toList $ postSet x m, not $ Set.member y s]
+
+splitByReachability :: Ord a => a -> AdjacencyMap a -> (Set a, Set a)
+splitByReachability a m = let s = reachable a m in (s, vertexSet m Set.\\ s)
