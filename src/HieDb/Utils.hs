@@ -1,4 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -6,6 +8,9 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 module HieDb.Utils where
+
+import qualified Data.Tree
+import Data.Traversable.TreeLike
 
 import Prelude hiding (mod)
 
@@ -31,6 +36,7 @@ import System.FilePath
 
 import Control.Monad.IO.Class
 
+import Control.Applicative
 import Control.Monad
 import Data.Char
 import Data.Function
@@ -151,18 +157,30 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
       , "DataDecl"
       , "TypeSig"
       , "ConDeclH98"
+      , "ClsInstD"
       ]
-        & map FS.mkFastString
-        & S.fromList
+
+
+    deadEnds =
+      [ "HsDerivingClause"
+      , "DerivDecl"
+      ]
+
 
     containsDeclarations nodeAnnotations =
-      any ( `S.member` S.map fst nodeAnnotations) [ "DataDecl" ]
+      any ( `S.member` S.map fst nodeAnnotations ) [ "DataDecl" ]
+
 
     declRows n@Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
-      if not ( S.null ( S.intersection annotations ( S.map fst nodeAnnotations ) ) ) then
+      if any ( `S.member` S.map fst nodeAnnotations ) deadEnds then
+        []
+
+      else if any ( `S.member` S.map fst nodeAnnotations ) annotations then
         let
-          First ( Just declName ) =
-            findDeclName n <> foldMap findDeclName nodeChildren
+          declName =
+            case getConst ( levelorder findDeclName ( identifierTree n ) ) of
+              First Nothing           -> error ( show nodeSpan )
+              First ( Just declName ) -> declName
 
           later =
             if containsDeclarations nodeAnnotations then
@@ -190,4 +208,25 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
 
 
     findDeclName HieTypes.Node{ nodeInfo = HieTypes.NodeInfo{ nodeIdentifiers } } =
-      foldMap ( either ( const mempty ) ( First . Just ) ) ( M.keys nodeIdentifiers )
+      traverse
+        ( Const . either ( const mempty ) ( First . Just ) )
+        ( M.keys
+            ( M.filter
+                ( any ( \case TyDecl -> True
+                              MatchBind -> True
+                              Decl _ _ -> True
+                              _ -> False
+                      )
+                  . identInfo
+                )
+                nodeIdentifiers
+            )
+        )
+
+
+identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )
+identifierTree HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren } =
+  Data.Tree.Node
+    { rootLabel = HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren = mempty }
+    , subForest = map identifierTree nodeChildren
+    }
