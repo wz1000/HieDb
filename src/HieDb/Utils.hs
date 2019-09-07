@@ -170,6 +170,10 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
       any ( `S.member` S.map fst nodeAnnotations ) [ "DataDecl" ]
 
 
+    isRoot =
+      S.member ("ClsInstD", "InstDecl")
+
+
     declRows n@Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
       if any ( `S.member` S.map fst nodeAnnotations ) deadEnds then
         []
@@ -198,6 +202,7 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
           , declSCol = srcSpanStartCol nodeSpan
           , declELine = srcSpanEndLine nodeSpan
           , declECol = srcSpanEndCol nodeSpan
+          , declRoot = isRoot nodeAnnotations
           }
           : later
 

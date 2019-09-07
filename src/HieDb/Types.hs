@@ -118,14 +118,15 @@ data DeclRow
   , declSCol :: Int
   , declELine :: Int
   , declECol :: Int
+  , declRoot :: Bool
   }
 
 instance ToRow DeclRow where
-  toRow (DeclRow a b c d e f g h i) = toRow ((a,b,c,d,e,f):.(g,h,i))
+  toRow (DeclRow a b c d e f g h i j) = toRow ((a,b,c,d,e,f):.(g,h,i,j))
 
 instance FromRow DeclRow where
   fromRow = DeclRow <$> field <*> field <*> field <*> field <*> field <*> field
-                   <*> field <*> field <*> field
+                   <*> field <*> field <*> field <*> field
 
 class Monad m => NameCacheMonad m where
   getNc :: m NameCache
@@ -176,7 +177,7 @@ instance Read Symbol where
   readsPrec _ s = case splitOn ":" s of
     [c] : [n, m, u] -> case fromNsChar c of
       Nothing -> []
-      Just ns -> 
+      Just ns ->
         let mn  = mkModuleName m
             uid = stringToUnitId u
             sym = Symbol

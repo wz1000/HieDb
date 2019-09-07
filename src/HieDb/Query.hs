@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module HieDb.Query where
 
-import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, postSet, vertexSet)
+import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, postSet, vertexSet, vertices, overlay)
 import           Algebra.Graph.Export.Dot
 
 import           GHC
@@ -127,16 +127,18 @@ declRefs db = do
 
 getGraph :: HieDb -> IO (AdjacencyMap Vertex)
 getGraph (getConn -> conn) = do
-  drs <-
+  es <-
     query_ conn "SELECT decls.mod, decls.hieFile, decls.occ, ref_decl.mod, ref_decl.hieFile, ref_decl.occ from decls join refs on refs.src = decls.hieFile and refs.srcMod = decls.mod and refs.srcUnit = decls.unit join decls ref_decl on ref_decl.mod = refs.mod and ref_decl.unit = refs.unit and ref_decl.occ = refs.occ where ((refs.sl > decls.sl) or (refs.sl = decls.sl and refs.sc > decls.sc)) and ((refs.el < decls.el) or (refs.el = decls.el and refs.ec <= decls.ec))"
-  return $ edges $ map (\( x :. y ) -> ( x, y )) drs
+  vs <-
+    query_ conn "SELECT decls.mod, decls.hieFile, decls.occ from decls"
+  return $ overlay ( vertices vs ) ( edges ( map (\( x :. y ) -> ( x, y )) es ) )
 
 getVertices :: HieDb -> Symbol -> IO [Vertex]
 getVertices (getConn -> conn) s = do
   let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
       m = moduleNameString $ moduleName $ symModule s
       u = unitIdString (moduleUnitId $ symModule s)
-  query conn "SELECT mod, hieFile, occ FROM decls WHERE occ = ? AND mod = ? AND unit = ?" (n, m, u)
+  query conn "SELECT mod, hieFile, occ FROM decls WHERE ( occ = ? AND mod = ? AND unit = ? ) OR is_root" (n, m, u)
 
 getReachable :: HieDb -> Symbol -> IO [Vertex]
 getReachable db s = do
