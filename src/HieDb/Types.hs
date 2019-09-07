@@ -19,6 +19,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.List.Split (splitOn)
 
 import Data.Time.Clock
 
@@ -156,3 +157,31 @@ data HieDbErr
   | AmbiguousUnitId (NonEmpty UnitId)
   | NameNotFound OccName Module
   | NameUnhelpfulSpan Name String
+
+data Symbol = Symbol
+    { symName   :: !OccName
+    , symModule :: !Module
+    } deriving (Eq, Ord)
+
+instance Show Symbol where
+    show s =  toNsChar (occNameSpace $ symName s)
+           :  ':'
+           :  occNameString (symName s)
+           <> ":"
+           <> moduleNameString (moduleName $ symModule s)
+           <> ":"
+           <> unitIdString (moduleUnitId $ symModule s)
+
+instance Read Symbol where
+  readsPrec _ s = case splitOn ":" s of
+    [c] : [n, m, u] -> case fromNsChar c of
+      Nothing -> []
+      Just ns -> 
+        let mn  = mkModuleName m
+            uid = stringToUnitId u
+            sym = Symbol
+                    { symName   = mkOccName ns n
+                    , symModule = mkModule uid mn
+                    }
+        in  [(sym, "")]
+    _               -> []

@@ -13,6 +13,7 @@ import           Algebra.Graph.Export.Dot
 
 import           GHC
 import           HieTypes
+import           Module
 import           Name
 
 import           System.Directory
@@ -120,23 +121,26 @@ getGraph (getConn -> conn) = do
     query_ conn "SELECt decls.file, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, decls.mod, decls.unit, ref_decl.file, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ, ref_decl.mod, ref_decl.unit FROM decls JOIN refs ON refs.srcMod = decls.mod AND refs.srcUnit = decls.unit JOIn decls ref_decl ON ref_decl.mod = refs.mod AND ref_decl.unit = refs.unit AND ref_decl.occ = refs.occ WHERe ((refs.sl > decls.sl) OR (refs.sl = decls.sl AND refs.sc > decls.sc)) AND ((refs.el < decls.el) OR (refs.el = decls.el AND refs.ec <= decls.ec))"
   return $ edges $ map (\( x :. y ) -> ( x, y )) drs
 
-getVertices :: HieDb -> String -> String -> String -> IO [Vertex]
-getVertices (getConn -> conn) n m u = do
+getVertices :: HieDb -> Symbol -> IO [Vertex]
+getVertices (getConn -> conn) s = do
+  let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
+      m = moduleNameString $ moduleName $ symModule s
+      u = unitIdString (moduleUnitId $ symModule s)
   xs <- query conn "SELECT file, sl, sc, el, ec FROM decls WHERE occ = ? AND mod = ? AND unit = ?" (n, m, u)
   return $ map (\(f, sl, sc, el, ec) -> (f, sl, sc, el, ec, n, m, u)) xs
 
-getReachable :: HieDb -> String -> String -> String -> IO [Vertex]
-getReachable db n m u = do
-  vs <- getVertices db n m u
+getReachable :: HieDb -> Symbol -> IO [Vertex]
+getReachable db s = do
+  vs <- getVertices db s
   graph <- getGraph db
   return $ Set.toList $ reachable graph vs
 
-getUnreachable :: HieDb -> String -> String -> String -> IO [Vertex]
-getUnreachable db n m u = do
-  vs <- getVertices db n m u
+getUnreachable :: HieDb -> Symbol -> IO [Vertex]
+getUnreachable db s = do
+  vs <- getVertices db s
   graph  <- getGraph db
-  let s = snd $ splitByReachability graph vs
-  return $ Set.toList s
+  let xs = snd $ splitByReachability graph vs
+  return $ Set.toList xs
 
 reachable :: forall a. Ord a => AdjacencyMap a -> [a] -> Set a
 reachable m = go Set.empty
