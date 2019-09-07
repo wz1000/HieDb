@@ -88,7 +88,8 @@ data Command
   | InfoAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | RefGraph
   | Dump FilePath
-
+  | Reachable Symbol
+  | Unreachable Symbol
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
 progParseInfo db = info (progParser db <**> helper)
@@ -161,6 +162,10 @@ cmdParser
               $ progDesc "Print name, module name, unit id for symbol at point/span")
   <> command "ref-graph" (info (pure RefGraph) $ progDesc "Generate a reachability graph")
   <> command "dump" (info (Dump <$> strArgument (metavar "HIE")) $ progDesc "Dump a HIE AST")
+  <> command "reachable" (info (Reachable <$> symbolParser)
+                         $ progDesc "Find all symbols reachable from a given symbol")
+  <> command "unreachable" (info (Unreachable <$> symbolParser)
+                           $ progDesc "Find all symbols unreachable from a given symbol")
 
 type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
@@ -170,6 +175,9 @@ posParser c = ((,) <$> argument auto (metavar $ c:"LINE") <*> argument auto (met
 maybeUnitId :: Parser (Maybe UnitId)
 maybeUnitId =
   optional (stringToUnitId <$> strOption (short 'u' <> long "unit-id" <> metavar "UNITID"))
+
+symbolParser :: Parser Symbol
+symbolParser = argument auto $ metavar "SYMBOL"
 
 moduleNameParser :: Parser ModuleName
 moduleNameParser = mkModuleName <$> strArgument (metavar "MODULE")
@@ -317,7 +325,8 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
       declRefs conn
     go _ (Dump path) =
       dump path
-
+    go conn (Reachable s) = getReachable conn s >>= mapM_ print
+    go conn (Unreachable s) = getUnreachable conn s >>= mapM_ print
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do

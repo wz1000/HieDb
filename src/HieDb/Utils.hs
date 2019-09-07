@@ -34,10 +34,9 @@ import qualified FastString as FS
 import System.Directory
 import System.FilePath
 
+import Control.Applicative
 import Control.Monad.IO.Class
 
-import Control.Applicative
-import Control.Monad
 import Data.Char
 import Data.Function
 import Data.Maybe
