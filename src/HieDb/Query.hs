@@ -26,7 +26,7 @@ import           Data.Coerce
 import           Data.Set (Set)
 import qualified Data.Set as Set
 
-import           Database.SQLite.Simple
+import Database.SQLite.Simple hiding ((:=))
 
 import           HieDb.Types
 import           HieDb.Utils
@@ -108,17 +108,27 @@ withTarget conn (Right (mn, muid)) f = do
             addRefsFrom conn file
             Right <$> withHieFile file (return . f)
 
-type Vertex = (String, Int, Int, Int, Int, String, String, String)
+type Vertex = (String, String, String)
 
 declRefs :: HieDb -> IO ()
 declRefs db = do
   graph <- getGraph db
-  putStrLn $ export (defaultStyle (\(_, _, _, _, _, f, _, _) -> f)) graph
+  writeFile
+    "refs.dot"
+    ( export
+        ( ( defaultStyle ( \( _, hie, occ ) -> hie <> ":" <> occ ) )
+          { vertexAttributes = \( mod, _, v : occ ) ->
+              [ "label" := ( mod <> "." <> occ )
+              , "fillcolor" := case v of 'v' -> "red"; 't' -> "blue" ; _ -> "black" ]
+          }
+        )
+        graph
+    )
 
 getGraph :: HieDb -> IO (AdjacencyMap Vertex)
 getGraph (getConn -> conn) = do
   drs <-
-    query_ conn "SELECt decls.file, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, decls.mod, decls.unit, ref_decl.file, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ, ref_decl.mod, ref_decl.unit FROM decls JOIN refs ON refs.srcMod = decls.mod AND refs.srcUnit = decls.unit JOIn decls ref_decl ON ref_decl.mod = refs.mod AND ref_decl.unit = refs.unit AND ref_decl.occ = refs.occ WHERe ((refs.sl > decls.sl) OR (refs.sl = decls.sl AND refs.sc > decls.sc)) AND ((refs.el < decls.el) OR (refs.el = decls.el AND refs.ec <= decls.ec))"
+    query_ conn "SELECT decls.mod, decls.hieFile, decls.occ, ref_decl.mod, ref_decl.hieFile, ref_decl.occ from decls join refs on refs.src = decls.hieFile and refs.srcMod = decls.mod and refs.srcUnit = decls.unit join decls ref_decl on ref_decl.mod = refs.mod and ref_decl.unit = refs.unit and ref_decl.occ = refs.occ where ((refs.sl > decls.sl) or (refs.sl = decls.sl and refs.sc > decls.sc)) and ((refs.el < decls.el) or (refs.el = decls.el and refs.ec <= decls.ec))"
   return $ edges $ map (\( x :. y ) -> ( x, y )) drs
 
 getVertices :: HieDb -> Symbol -> IO [Vertex]
@@ -126,8 +136,7 @@ getVertices (getConn -> conn) s = do
   let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
       m = moduleNameString $ moduleName $ symModule s
       u = unitIdString (moduleUnitId $ symModule s)
-  xs <- query conn "SELECT file, sl, sc, el, ec FROM decls WHERE occ = ? AND mod = ? AND unit = ?" (n, m, u)
-  return $ map (\(f, sl, sc, el, ec) -> (f, sl, sc, el, ec, n, m, u)) xs
+  query conn "SELECT mod, hieFile, occ FROM decls WHERE occ = ? AND mod = ? AND unit = ?" (n, m, u)
 
 getReachable :: HieDb -> Symbol -> IO [Vertex]
 getReachable db s = do
