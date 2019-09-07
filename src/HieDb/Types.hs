@@ -19,13 +19,14 @@ import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.List.Split (splitOn)
 
 import Data.Time.Clock
 
 import Database.SQLite.Simple
 import Database.SQLite.Simple.ToField
 import Database.SQLite.Simple.FromField
+
+import qualified Text.ParserCombinators.ReadP as R
 
 newtype HieDb = HieDb { getConn :: Connection }
 
@@ -174,15 +175,34 @@ instance Show Symbol where
            <> unitIdString (moduleUnitId $ symModule s)
 
 instance Read Symbol where
-  readsPrec _ s = case splitOn ":" s of
-    [c] : [n, m, u] -> case fromNsChar c of
-      Nothing -> []
-      Just ns ->
-        let mn  = mkModuleName m
-            uid = stringToUnitId u
-            sym = Symbol
-                    { symName   = mkOccName ns n
-                    , symModule = mkModule uid mn
-                    }
-        in  [(sym, "")]
-    _               -> []
+  readsPrec = const $ R.readP_to_S readSymbol
+
+readNameSpace :: R.ReadP NameSpace
+readNameSpace = do
+  c <- R.get
+  case fromNsChar c of
+    Nothing -> R.pfail
+    Just ns -> return ns
+
+readColon :: R.ReadP ()
+readColon = do
+  c <- R.get
+  when (c /= ':') R.pfail
+
+readSymbol :: R.ReadP Symbol
+readSymbol = do
+  ns <- readNameSpace
+  readColon
+  n <- R.many1 R.get
+  readColon
+  m <- R.many1 R.get
+  readColon
+  u <- R.many1 R.get
+  R.eof
+  let mn  = mkModuleName m
+      uid = stringToUnitId u
+      sym = Symbol
+              { symName   = mkOccName ns n
+              , symModule = mkModule uid mn
+              }
+  return sym
