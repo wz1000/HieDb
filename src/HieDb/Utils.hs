@@ -161,8 +161,10 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
     declRows n@Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
       if not ( S.null ( S.intersection annotations ( S.map fst nodeAnnotations ) ) ) then
         let
-          First ( Just declName ) =
-            findDeclName n <> foldMap findDeclName nodeChildren
+          declName =
+            case findDeclName n <> foldMap findDeclName nodeChildren of
+              First Nothing           -> error ( show nodeSpan )
+              First ( Just declName ) -> declName
 
           later =
             if containsDeclarations nodeAnnotations then
@@ -189,5 +191,6 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
         foldMap declRows nodeChildren
 
 
-    findDeclName HieTypes.Node{ nodeInfo = HieTypes.NodeInfo{ nodeIdentifiers } } =
+    findDeclName HieTypes.Node{ nodeInfo = HieTypes.NodeInfo{ nodeIdentifiers }, nodeChildren } =
       foldMap ( either ( const mempty ) ( First . Just ) ) ( M.keys nodeIdentifiers )
+        <> foldMap findDeclName nodeChildren
