@@ -156,4 +156,3 @@ data HieDbErr
   | AmbiguousUnitId (NonEmpty UnitId)
   | NameNotFound OccName Module
   | NameUnhelpfulSpan Name String
-  | SymbolNotFound String String String

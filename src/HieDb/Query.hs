@@ -120,38 +120,30 @@ getGraph (getConn -> conn) = do
     query_ conn "SELECt decls.file, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, decls.mod, decls.unit, ref_decl.file, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ, ref_decl.mod, ref_decl.unit FROM decls JOIN refs ON refs.srcMod = decls.mod AND refs.srcUnit = decls.unit JOIn decls ref_decl ON ref_decl.mod = refs.mod AND ref_decl.unit = refs.unit AND ref_decl.occ = refs.occ WHERe ((refs.sl > decls.sl) OR (refs.sl = decls.sl AND refs.sc > decls.sc)) AND ((refs.el < decls.el) OR (refs.el = decls.el AND refs.ec <= decls.ec))"
   return $ edges $ map (\( x :. y ) -> ( x, y )) drs
 
-getVertex :: HieDb -> String -> String -> String -> IO (Either HieDbErr Vertex)
-getVertex (getConn -> conn) n m u = do
-  drs <- query conn "SELECT file, sl, sc, el, ec FROM decls WHERE occ = ? AND mod = ? AND unit = ?" (n, m, u)
-  case drs of
-    [(f, sl, sc, el, ec)] -> return $ Right (f, sl, sc, el, ec, n, m, u)
-    _                     -> return $ Left $ SymbolNotFound n m u
+getVertices :: HieDb -> String -> String -> String -> IO [Vertex]
+getVertices (getConn -> conn) n m u = do
+  xs <- query conn "SELECT file, sl, sc, el, ec FROM decls WHERE occ = ? AND mod = ? AND unit = ?" (n, m, u)
+  return $ map (\(f, sl, sc, el, ec) -> (f, sl, sc, el, ec, n, m, u)) xs
 
-getReachable :: HieDb -> String -> String -> String -> IO (Either HieDbErr [Vertex])
+getReachable :: HieDb -> String -> String -> String -> IO [Vertex]
 getReachable db n m u = do
-  ev <- getVertex db n m u
-  case ev of
-    Left err -> return $ Left err
-    Right v  -> do
-      graph <- getGraph db
-      return $ Right $ Set.toList $ reachable v graph
+  vs <- getVertices db n m u
+  graph <- getGraph db
+  return $ Set.toList $ reachable graph vs
 
-getUnreachable :: HieDb -> String -> String -> String -> IO (Either HieDbErr [Vertex])
+getUnreachable :: HieDb -> String -> String -> String -> IO [Vertex]
 getUnreachable db n m u = do
-  ev <- getVertex db n m u
-  case ev of
-    Left err -> return $ Left err
-    Right v  -> do
-      graph  <- getGraph db
-      let s = snd $ splitByReachability v graph
-      return $ Right $ Set.toList s
+  vs <- getVertices db n m u
+  graph  <- getGraph db
+  let s = snd $ splitByReachability graph vs
+  return $ Set.toList s
 
-reachable :: forall a. Ord a => a -> AdjacencyMap a -> Set a
-reachable a m = go Set.empty [a]
+reachable :: forall a. Ord a => AdjacencyMap a -> [a] -> Set a
+reachable m = go Set.empty
   where
     go :: Set a -> [a] -> Set a
     go s []       = s
     go s (x : xs) = go (Set.insert x s) $ xs ++ [y | y <- Set.toList $ postSet x m, not $ Set.member y s]
 
-splitByReachability :: Ord a => a -> AdjacencyMap a -> (Set a, Set a)
-splitByReachability a m = let s = reachable a m in (s, vertexSet m Set.\\ s)
+splitByReachability :: Ord a => AdjacencyMap a -> [a] -> (Set a, Set a)
+splitByReachability m vs = let s = reachable m vs in (s, vertexSet m Set.\\ s)

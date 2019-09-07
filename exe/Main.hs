@@ -321,16 +321,8 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
         (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
     go conn RefGraph =
       declRefs conn
-    go conn (Reachable n m u) = do
-      evs <- getReachable conn n m u
-      case evs of
-        Left _   -> error "Symbol not found."
-        Right vs -> forM_ vs print
-    go conn (Unreachable n m u) = do
-      evs <- getUnreachable conn n m u
-      case evs of
-        Left _   -> error "Symbol not found."
-        Right vs -> forM_ vs print
+    go conn (Reachable n m u) = getReachable conn n m u >>= mapM_ print
+    go conn (Unreachable n m u) = getUnreachable conn n m u >>= mapM_ print
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do
