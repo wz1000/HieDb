@@ -159,7 +159,7 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
       any ( `S.member` S.map fst nodeAnnotations) [ "DataDecl" ]
 
     declRows n@Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
-      if not ( S.null ( S.intersection annotations ( traceShowId ( S.map fst nodeAnnotations ) ) ) ) then
+      if not ( S.null ( S.intersection annotations ( S.map fst nodeAnnotations ) ) ) then
         let
           First ( Just declName ) =
             findDeclName n <> foldMap findDeclName nodeChildren
