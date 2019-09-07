@@ -11,3 +11,5 @@ repository head.hackage
    key-threshold: 3
 
 -- end of generated content
+
+allow-newer: tree-traversals:base, tree-traversals:containers
