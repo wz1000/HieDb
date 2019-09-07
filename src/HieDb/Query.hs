@@ -9,6 +9,7 @@
 module HieDb.Query where
 
 import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, postSet, vertexSet, vertices, overlay)
+import           Algebra.Graph.AdjacencyMap.Algorithm (dfs)
 import           Algebra.Graph.Export.Dot
 
 import           GHC
@@ -144,7 +145,7 @@ getReachable :: HieDb -> Symbol -> IO [Vertex]
 getReachable db s = do
   vs <- getVertices db s
   graph <- getGraph db
-  return $ Set.toList $ reachable graph vs
+  return $ dfs vs graph
 
 getUnreachable :: HieDb -> Symbol -> IO [Vertex]
 getUnreachable db s = do
@@ -153,12 +154,5 @@ getUnreachable db s = do
   let xs = snd $ splitByReachability graph vs
   return $ Set.toList xs
 
-reachable :: forall a. Ord a => AdjacencyMap a -> [a] -> Set a
-reachable m = go Set.empty
-  where
-    go :: Set a -> [a] -> Set a
-    go s []       = s
-    go s (x : xs) = go (Set.insert x s) $ xs ++ [y | y <- Set.toList $ postSet x m, not $ Set.member y s]
-
 splitByReachability :: Ord a => AdjacencyMap a -> [a] -> (Set a, Set a)
-splitByReachability m vs = let s = reachable m vs in (s, vertexSet m Set.\\ s)
+splitByReachability m vs = let s = Set.fromList (dfs vs m) in (s, vertexSet m Set.\\ s)
