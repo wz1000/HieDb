@@ -19,9 +19,10 @@ import           Name
 
 import           System.Directory
 
+import           Control.Monad (foldM)
 import           Control.Monad.IO.Class
 
-import           Data.List (intercalate)
+import           Data.List (foldl', intercalate)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Coerce
 import           Data.Set (Set)
@@ -134,22 +135,28 @@ getGraph (getConn -> conn) = do
     query_ conn "SELECT decls.mod, decls.hieFile, decls.occ from decls"
   return $ overlay ( vertices vs ) ( edges ( map (\( x :. y ) -> ( x, y )) es ) )
 
-getVertices :: HieDb -> Symbol -> IO [Vertex]
-getVertices (getConn -> conn) s = do
-  let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
-      m = moduleNameString $ moduleName $ symModule s
-      u = unitIdString (moduleUnitId $ symModule s)
-  query conn "SELECT mod, hieFile, occ FROM decls WHERE ( occ = ? AND mod = ? AND unit = ? ) OR is_root" (n, m, u)
+getVertices :: HieDb -> [Symbol] -> IO [Vertex]
+getVertices (getConn -> conn) ss = Set.toList <$> foldM f Set.empty ss
+  where
+    f :: Set Vertex -> Symbol -> IO (Set Vertex)
+    f vs s = one s >>= return . foldl' (flip Set.insert) vs
 
-getReachable :: HieDb -> Symbol -> IO [Vertex]
-getReachable db s = do
-  vs <- getVertices db s
+    one :: Symbol -> IO [Vertex]
+    one s = do
+      let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
+          m = moduleNameString $ moduleName $ symModule s
+          u = unitIdString (moduleUnitId $ symModule s)
+      query conn "SELECT mod, hieFile, occ FROM decls WHERE ( occ = ? AND mod = ? AND unit = ? ) OR is_root" (n, m, u)
+
+getReachable :: HieDb -> [Symbol] -> IO [Vertex]
+getReachable db symbols = do
+  vs <- getVertices db symbols
   graph <- getGraph db
   return $ dfs vs graph
 
-getUnreachable :: HieDb -> Symbol -> IO [Vertex]
-getUnreachable db s = do
-  vs <- getVertices db s
+getUnreachable :: HieDb -> [Symbol] -> IO [Vertex]
+getUnreachable db symbols = do
+  vs <- getVertices db symbols
   graph  <- getGraph db
   let xs = snd $ splitByReachability graph vs
   return $ Set.toList xs

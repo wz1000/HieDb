@@ -88,8 +88,8 @@ data Command
   | InfoAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | RefGraph
   | Dump FilePath
-  | Reachable Symbol
-  | Unreachable Symbol
+  | Reachable [Symbol]
+  | Unreachable [Symbol]
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
 progParseInfo db = info (progParser db <**> helper)
@@ -162,10 +162,10 @@ cmdParser
               $ progDesc "Print name, module name, unit id for symbol at point/span")
   <> command "ref-graph" (info (pure RefGraph) $ progDesc "Generate a reachability graph")
   <> command "dump" (info (Dump <$> strArgument (metavar "HIE")) $ progDesc "Dump a HIE AST")
-  <> command "reachable" (info (Reachable <$> symbolParser)
-                         $ progDesc "Find all symbols reachable from a given symbol")
-  <> command "unreachable" (info (Unreachable <$> symbolParser)
-                           $ progDesc "Find all symbols unreachable from a given symbol")
+  <> command "reachable" (info (Reachable <$> some symbolParser)
+                         $ progDesc "Find all symbols reachable from the given symbols")
+  <> command "unreachable" (info (Unreachable <$> some symbolParser)
+                           $ progDesc "Find all symbols unreachable from the given symbols")
 
 type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
