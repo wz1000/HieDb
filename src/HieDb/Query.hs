@@ -107,14 +107,44 @@ withTarget conn (Right (mn, muid)) f = do
             addRefsFrom conn file
             Right <$> withHieFile file (return . f)
 
+type Vertex = (String, Int, Int, Int, Int, String, String, String)
+
 declRefs :: HieDb -> IO ()
-declRefs ( getConn -> conn ) = do
+declRefs db = do
+  graph <- getGraph db
+  putStrLn $ export (defaultStyle (\(_, _, _, _, _, f, _, _) -> f)) graph
+
+getGraph :: HieDb -> IO (AdjacencyMap Vertex)
+getGraph (getConn -> conn) = do
   drs <-
-    query_ conn "select decls.hieFile, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, ref_decl.hieFile, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ from decls join refs on refs.srcMod = decls.mod and refs.srcUnit = decls.unit join decls ref_decl on ref_decl.mod = refs.mod and ref_decl.unit = refs.unit and ref_decl.occ = refs.occ where ((refs.sl > decls.sl) or (refs.sl = decls.sl and refs.sc > decls.sc)) and ((refs.el < decls.el) or (refs.el = decls.el and refs.ec <= decls.ec))"
-  let
-    graph :: AdjacencyMap ( String, Int, Int, Int, Int, String )
-    graph = edges ( map ( \( x :. y ) -> ( x, y ) ) drs )
-  writeFile "refs.dot" ( export (defaultStyle (\(a, b, c, d, e, f) -> intercalate ":" (a : map show [b, c, d, e]) <> " " <> f)) graph )
+    query_ conn "SELECt decls.file, decls.sl, decls.sc, decls.el, decls.ec, decls.occ, decls.mod, decls.unit, ref_decl.file, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec, ref_decl.occ, ref_decl.mod, ref_decl.unit FROM decls JOIN refs ON refs.srcMod = decls.mod AND refs.srcUnit = decls.unit JOIn decls ref_decl ON ref_decl.mod = refs.mod AND ref_decl.unit = refs.unit AND ref_decl.occ = refs.occ WHERe ((refs.sl > decls.sl) OR (refs.sl = decls.sl AND refs.sc > decls.sc)) AND ((refs.el < decls.el) OR (refs.el = decls.el AND refs.ec <= decls.ec))"
+  return $ edges $ map (\( x :. y ) -> ( x, y )) drs
+
+getVertex :: HieDb -> String -> String -> String -> IO (Either HieDbErr Vertex)
+getVertex (getConn -> conn) n m u = do
+  drs <- query conn "SELECT file, sl, sc, el, ec FROM decls WHERE occ = ? AND mod = ? AND unit = ?" (n, m, u)
+  case drs of
+    [(f, sl, sc, el, ec)] -> return $ Right (f, sl, sc, el, ec, n, m, u)
+    _                     -> return $ Left $ SymbolNotFound n m u
+
+getReachable :: HieDb -> String -> String -> String -> IO (Either HieDbErr [Vertex])
+getReachable db n m u = do
+  ev <- getVertex db n m u
+  case ev of
+    Left err -> return $ Left err
+    Right v  -> do
+      graph <- getGraph db
+      return $ Right $ Set.toList $ reachable v graph
+
+getUnreachable :: HieDb -> String -> String -> String -> IO (Either HieDbErr [Vertex])
+getUnreachable db n m u = do
+  ev <- getVertex db n m u
+  case ev of
+    Left err -> return $ Left err
+    Right v  -> do
+      graph  <- getGraph db
+      let s = snd $ splitByReachability v graph
+      return $ Right $ Set.toList s
 
 reachable :: forall a. Ord a => a -> AdjacencyMap a -> Set a
 reachable a m = go Set.empty [a]

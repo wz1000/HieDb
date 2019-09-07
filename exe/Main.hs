@@ -86,7 +86,8 @@ data Command
   | DefsAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | InfoAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | RefGraph
-
+  | Reachable String String String
+  | Unreachable String String String
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
 progParseInfo db = info (progParser db <**> helper)
@@ -158,6 +159,14 @@ cmdParser
                             <*> optional (posParser 'E'))
               $ progDesc "Print name, module name, unit id for symbol at point/span")
   <> command "ref-graph" (info (pure RefGraph) $ progDesc "Generate a reachability graph")
+  <> command "reachable" (info (Reachable <$> (strArgument (metavar "NAME"))
+                                          <*> (strArgument (metavar "MODULE"))
+                                          <*> (strArgument $ metavar "UNIT")) 
+                         $ progDesc "Find all symbols reachable from a given symbol")
+  <> command "unreachable" (info (Unreachable <$> (strArgument (metavar "NAME"))
+                                              <*> (strArgument (metavar "MODULE"))
+                                              <*> (strArgument $ metavar "UNIT")) 
+                           $ progDesc "Find all symbols unreachable from a given symbol")
 
 type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
@@ -312,7 +321,16 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
         (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
     go conn RefGraph =
       declRefs conn
-
+    go conn (Reachable n m u) = do
+      evs <- getReachable conn n m u
+      case evs of
+        Left _   -> error "Symbol not found."
+        Right vs -> forM_ vs print
+    go conn (Unreachable n m u) = do
+      evs <- getUnreachable conn n m u
+      case evs of
+        Left _   -> error "Symbol not found."
+        Right vs -> forM_ vs print
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do
