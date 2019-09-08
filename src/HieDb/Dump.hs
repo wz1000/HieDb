@@ -1,30 +1,21 @@
 {-# language DisambiguateRecordFields #-}
 {-# language NamedFieldPuns #-}
-{-# language OverloadedStrings #-}
 
 module HieDb.Dump where
 
-import Control.Monad ( guard )
 import qualified Data.Map.Strict as Map
-import Data.Monoid
-import qualified Data.Set
-import qualified DynFlags
-import qualified FastString
-import qualified GHC
-import GHC.Paths (libdir)
 import qualified HieBin
-import HieBin ( HieFileResult( HieFileResult ) )
-import HieDb.Utils ( dynFlagsForPrinting )
+import           HieBin ( HieFileResult( HieFileResult ) )
+import           HieDb.Utils ( dynFlagsForPrinting )
 import qualified HieDebug
 import qualified HieTypes
-import HieTypes ( HieFile( HieFile ) )
-import qualified Name
+import           HieTypes ( HieFile(..) )
 import qualified NameCache
 import qualified Outputable
-import SysTools ( initSysTools )
-import System.Environment ( getArgs )
+import           Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified UniqSupply
-
 
 dump :: FilePath -> IO ()
 dump hieFilePath = do
@@ -38,7 +29,7 @@ dump hieFilePath = do
     HieBin.readHieFile nameCache hieFilePath
 
   let
-    HieFile{ hie_hs_file, hie_asts } =
+    HieFile{ hie_asts } =
       hie_file_result
 
     astRoot =
@@ -53,3 +44,16 @@ dump hieFilePath = do
         dynFlags
         ( HieDebug.ppHie astRoot )
     )
+
+sourceCode :: FilePath -> IO [Text]
+sourceCode hieFilePath = do
+  nameCache <- do
+    uniqueSupply <-
+      UniqSupply.mkSplitUniqSupply 'z'
+
+    return ( NameCache.initNameCache uniqueSupply [] )
+
+  ( HieBin.HieFileResult{ hie_file_result }, _ ) <-
+    HieBin.readHieFile nameCache hieFilePath
+
+  return $ T.lines $ T.decodeUtf8 $ hie_hs_src hie_file_result

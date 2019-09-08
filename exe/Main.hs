@@ -90,6 +90,7 @@ data Command
   | Dump FilePath
   | Reachable [Symbol]
   | Unreachable [Symbol]
+  | Html [Symbol]
 
 progParseInfo :: FilePath -> ParserInfo (Options, Command)
 progParseInfo db = info (progParser db <**> helper)
@@ -166,7 +167,8 @@ cmdParser
                          $ progDesc "Find all symbols reachable from the given symbols")
   <> command "unreachable" (info (Unreachable <$> some symbolParser)
                            $ progDesc "Find all symbols unreachable from the given symbols")
-
+  <> command "html" (info (Html <$> some symbolParser)
+                    $ progDesc "generate html files for reachability from the given symbols")
 type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
 posParser :: Char -> Parser (Int,Int)
@@ -327,6 +329,7 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
       dump path
     go conn (Reachable s) = getReachable conn s >>= mapM_ print
     go conn (Unreachable s) = getUnreachable conn s >>= mapM_ print
+    go conn (Html s) = html conn s
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do
