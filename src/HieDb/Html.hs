@@ -110,7 +110,10 @@ layout ts ss =
     in  [(i, t, lsps) | (i, (t, lsps)) <- IM.toList $ j <$> m2]
   where
     f :: IntMap (Text, Int, [LineSpan]) -> Span -> IntMap (Text, Int, [LineSpan])
-    f m = foldl' g m . lineSpans (\i -> let (_, l, _) = m IM.! i in l)
+    f m = foldl' g m . lineSpans lookup'
+      where lookup' i = case IM.lookup i m of
+                Nothing        -> 0
+                Just (_, l, _) -> l
 
     g :: IntMap (Text, Int, [LineSpan]) -> LineSpan -> IntMap (Text, Int, [LineSpan])
     g m lsp = IM.adjust (h lsp) (lspLine lsp) m
