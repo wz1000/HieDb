@@ -38,7 +38,6 @@ import Control.Applicative
 import Control.Monad.IO.Class
 
 import Data.Char
-import Data.Function
 import Data.Maybe
 import Data.Monoid
 
