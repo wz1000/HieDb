@@ -148,7 +148,7 @@ getVertices (getConn -> conn) ss = Set.toList <$> foldM f Set.empty ss
       let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
           m = moduleNameString $ moduleName $ symModule s
           u = unitIdString (moduleUnitId $ symModule s)
-      query conn "SELECT mod, hieFile, occ, sl, sc, el, ec FROM decls WHERE ( occ = ? AND mod = ? AND unit = ? ) OR is_root" (n, m, u)
+      query conn "SELECT mod, hieFile, occ, sl, sc, el, ec FROM decls WHERE ( occ = ? AND mod = ? AND unit = ? ) " (n, m, u)
 
 getReachable :: HieDb -> [Symbol] -> IO [Vertex]
 getReachable db symbols = fst <$> getReachableUnreachable db symbols

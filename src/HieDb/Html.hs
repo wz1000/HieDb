@@ -10,10 +10,7 @@ import           Control.Monad (forM_)
 import           Data.Function (on)
 import           Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM
-import           Data.IntSet (IntSet)
-import qualified Data.IntSet as IS
 import           Data.List (foldl', sortBy)
-import           Data.String (fromString)
 import           Data.Text   (Text)
 import qualified Data.Text as T
 import           Lucid

@@ -340,8 +340,14 @@ printInfo dynFlags x sp = do
   forM_ idents $ \(ident,inf) -> do
     case ident of
       Left mdl -> putStrLn $ "Module: " ++ moduleNameString mdl
-      Right nm -> putStrLn $ showSDoc dynFlags $
-        hang (ppr nm <+> text "defined at" <+> ppr (nameSrcSpan nm)) 4 (ppr inf)
+      Right nm -> do
+        case nameModule_maybe nm of
+          Nothing -> pure ()
+          Just m -> do
+            putStr "Symbol:"
+            putStrLn (show $ Symbol (nameOccName nm) m)
+        putStrLn $ showSDoc dynFlags $
+          hang (ppr nm <+> text "defined at" <+> ppr (nameSrcSpan nm)) 4 (ppr inf)
   putStrLn "Types:"
   let types = nodeType x
   forM_ types $ \typ -> do
