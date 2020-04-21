@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE CPP #-}
 module HieDb.Utils where
 
 import qualified Data.Tree
@@ -111,7 +112,11 @@ pointCommand hf (sl,sc) mep k =
 dynFlagsForPrinting :: IO DynFlags
 dynFlagsForPrinting = do
   systemSettings <- initSysTools libdir
+#if __GLASGOW_HASKELL__ >= 810
+  return $ defaultDynFlags systemSettings $ LlvmConfig [] []
+#else
   return $ defaultDynFlags systemSettings ([], [])
+#endif
 
 isCons :: String -> Bool
 isCons (':':_) = True
