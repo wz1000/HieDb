@@ -303,7 +303,7 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
       let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
       forM_ names $ \name -> do
         case nameSrcSpan name of
-          RealSrcSpan dsp -> do
+          RealSrcSpan dsp _ -> do
             putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is defined at:"]
             reportRefSpans [(fromMaybe (hie_module hf) (nameModule_maybe name)
                             ,(srcSpanStartLine dsp,srcSpanStartCol dsp)

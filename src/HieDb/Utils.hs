@@ -92,7 +92,7 @@ findDefInFile occ mdl file = do
   nc' <- execDbM nc $ withHieFile file (const $ return ())
   case lookupOrigNameCache (nsNames nc') mdl occ of
     Just name -> case nameSrcSpan name of
-      RealSrcSpan sp -> return $ Right (sp, mdl)
+      RealSrcSpan sp _ -> return $ Right (sp, mdl)
       UnhelpfulSpan msg -> return $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
     Nothing -> return $ Left $ NameNotFound occ mdl
 

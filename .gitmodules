@@ -1,0 +1,3 @@
+[submodule "ghc-api-compat"]
+	path = ghc-api-compat
+	url = https://github.com/hsyl20/ghc-api-compat

@@ -42,7 +42,7 @@ dump hieFilePath = do
   putStrLn
     ( Outputable.showSDoc
         dynFlags
-        ( HieDebug.ppHie astRoot )
+        ( Outputable.ppr astRoot )
     )
 
 sourceCode :: FilePath -> IO [Text]
