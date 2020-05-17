@@ -11,7 +11,6 @@
 module HieDb.Utils where
 
 import qualified Data.Tree
-import Data.Traversable.TreeLike
 
 import Prelude hiding (mod)
 
@@ -27,7 +26,6 @@ import DynFlags
 import SysTools
 import GHC.Paths (libdir)
 
-import qualified Data.Set as S
 import qualified Data.Map as M
 
 import qualified FastString as FS
@@ -35,7 +33,8 @@ import qualified FastString as FS
 import System.Directory
 import System.FilePath
 
-import Control.Applicative
+import Control.Arrow ( (&&&) )
+import Data.Bifunctor ( bimap )
 import Control.Monad.IO.Class
 
 import Data.Char
@@ -123,59 +122,30 @@ isCons (':':_) = True
 isCons (x:_) | isUpper x = True
 isCons _ = False
 
-generateRefs
-  :: Foldable f
-  => f (HieAST a)
-  -> [(Identifier,Span)]
-generateRefs = concatMap go
+genRefsAndDecls :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> ([RefRow],[DeclRow])
+genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
   where
-    go ast = this ++ concatMap go (nodeChildren ast)
-      where
-        this = (,nodeSpan ast) <$> M.keys (nodeIdentifiers $ nodeInfo ast)
+    flat = concatMap (\(a,xs) -> map (a,) xs)
+    genRows = foldMap go
+    go = bimap maybeToList maybeToList . (goRef &&& goDec)
 
-genRefRow :: FilePath -> HieFile -> [RefRow]
-genRefRow path hf = genRows $ generateRefs $ getAsts $ hie_asts hf
-  where
-    genRows = mapMaybe go
-    go ((Right name, sp))
+    goRef (Right name, (sp,_))
       | Just mod <- nameModule_maybe name = Just $
           RefRow path smod sunit occ (moduleName mod) (moduleUnitId mod) file sl sc el ec
           where
-            smod = moduleName $ hie_module hf
-            sunit = moduleUnitId $ hie_module hf
+            smod = moduleName smdl
+            sunit = moduleUnitId smdl
             occ = nameOccName name
             file = FS.unpackFS $ srcSpanFile sp
             sl = srcSpanStartLine sp
             sc = srcSpanStartCol sp
             el = srcSpanEndLine sp
             ec = srcSpanEndCol sp
-    go _ = Nothing
+    goRef _ = Nothing
 
-genDefRow :: FilePath -> HieFile -> [DefRow]
-genDefRow path hf = genRows $ M.keys $ generateReferencesMap $ getAsts $ hie_asts hf
-  where
-    genRows = mapMaybe go
-    go (Right name)
+    goDec (Right name,(_,dets))
       | Just mod <- nameModule_maybe name
-      , mod == hie_module hf
-      , occ  <- nameOccName name
-      , RealSrcSpan sp <- nameSrcSpan name
-      , file <- FS.unpackFS $ srcSpanFile sp
-      , sl   <- srcSpanStartLine sp
-      , sc   <- srcSpanStartCol sp
-      , el   <- srcSpanEndLine sp
-      , ec   <- srcSpanEndCol sp
-      = Just $ DefRow path (moduleName mod) (moduleUnitId mod) occ file sl sc el ec
-    go _ = Nothing
-
-genDeclRow :: FilePath -> HieFile -> [DeclRow]
-genDeclRow path hf = genRows $ flat $ M.toList $ generateReferencesMap $ getAsts $ hie_asts hf
-  where
-    flat = concatMap (\(a,xs) -> map ((a,) . snd) xs)
-    genRows = mapMaybe go
-    go ((Right name),dets)
-      | Just mod <- nameModule_maybe name
-      , mod == hie_module hf
+      , mod == smdl
       , occ  <- nameOccName name
       , info <- identInfo dets
       , Just sp <- getBindSpan info
@@ -186,7 +156,7 @@ genDeclRow path hf = genRows $ flat $ M.toList $ generateReferencesMap $ getAsts
       , el   <- srcSpanEndLine sp
       , ec   <- srcSpanEndCol sp
       = Just $ DeclRow path (moduleName mod) (moduleUnitId mod) occ file sl sc el ec is_root
-    go _ = Nothing
+    goDec _ = Nothing
 
     isRoot = any (\case
       ValBind InstanceBind _ _ -> True
@@ -200,87 +170,22 @@ genDeclRow path hf = genRows $ flat $ M.toList $ generateReferencesMap $ getAsts
     goDecl (RecField _ sp) = sp
     goDecl _ = Nothing
 
-
-
-{-
+genDefRow :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> [DefRow]
+genDefRow path smod refmap = genRows $ M.keys refmap
   where
-
-    annotations =
-      [ "FunBind"
-      , "DataDecl"
-      , "TypeSig"
-      , "ConDeclH98"
-      , "ClsInstD"
-      ]
-
-
-    deadEnds =
-      [ "HsDerivingClause"
-      , "DerivDecl"
-      ]
-
-
-    containsDeclarations nodeAnnotations =
-      any ( `S.member` S.map fst nodeAnnotations ) [ "DataDecl" ]
-
-
-    isRoot =
-      S.member ("ClsInstD", "InstDecl")
-
-
-    declRows n@Node{ nodeInfo = NodeInfo{ nodeAnnotations }, nodeSpan, nodeChildren } =
-      if any ( `S.member` S.map fst nodeAnnotations ) deadEnds then
-        []
-
-      else if any ( `S.member` S.map fst nodeAnnotations ) annotations then do
-        declName <-
-          case getConst ( levelorder findDeclName ( identifierTree n ) ) of
-            First Nothing           -> []
-            First ( Just declName ) -> pure declName
-
-        let
-          later =
-            if containsDeclarations nodeAnnotations then
-              foldMap declRows nodeChildren
-
-            else
-              []
-
-        DeclRow
-          { declSrc = path
-          , declMod = moduleName $ hie_module hf
-          , declUnit = moduleUnitId $ hie_module hf
-          , declNameOcc = nameOccName declName
-          , declFile = FS.unpackFS $ srcSpanFile nodeSpan
-          , declSLine = srcSpanStartLine nodeSpan
-          , declSCol = srcSpanStartCol nodeSpan
-          , declELine = srcSpanEndLine nodeSpan
-          , declECol = srcSpanEndCol nodeSpan
-          , declRoot = isRoot nodeAnnotations
-          }
-          : later
-
-      else
-        foldMap declRows nodeChildren
-
-
-    findDeclName HieTypes.Node{ nodeInfo = HieTypes.NodeInfo{ nodeIdentifiers } } =
-      traverse
-        ( Const . either ( const mempty ) ( First . Just ) )
-        ( M.keys
-            ( M.filter
-                ( any ( \case TyDecl -> True
-                              MatchBind -> True
-                              Decl _ _ -> True
-                              _ -> False
-                      )
-                  . identInfo
-                )
-                nodeIdentifiers
-            )
-        )
-
--}
+    genRows = mapMaybe go
+    go (Right name)
+      | Just mod <- nameModule_maybe name
+      , mod == smod
+      , occ  <- nameOccName name
+      , RealSrcSpan sp <- nameSrcSpan name
+      , file <- FS.unpackFS $ srcSpanFile sp
+      , sl   <- srcSpanStartLine sp
+      , sc   <- srcSpanStartCol sp
+      , el   <- srcSpanEndLine sp
+      , ec   <- srcSpanEndCol sp
+      = Just $ DefRow path (moduleName mod) (moduleUnitId mod) occ file sl sc el ec
+    go _ = Nothing
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )
 identifierTree HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren } =

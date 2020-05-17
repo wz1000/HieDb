@@ -11,6 +11,7 @@ import Prelude hiding (mod)
 
 import GHC
 import HieTypes
+import HieUtils
 
 import Control.Monad.IO.Class
 
@@ -45,15 +46,16 @@ addRefsFromLoaded (getConn -> conn) path time hf = liftIO $ withTransaction conn
   execute conn "DELETE FROM refs WHERE src = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs WHERE hieFile = ?" (Only path)
-  let mod = moduleName $ hie_module hf
-      uid = moduleUnitId $ hie_module hf
+  let mod = moduleName smod
+      uid = moduleUnitId smod
+      smod = hie_module hf
+      refmap = generateReferencesMap $ getAsts $ hie_asts hf
       modrow = HieModuleRow path mod uid time
   execute conn "INSERT INTO mods VALUES (?,?,?,?)" modrow
-  let rows = genRefRow path hf
+  let (rows,decls) = genRefsAndDecls path smod refmap
   executeMany conn "INSERT INTO refs VALUES (?,?,?,?,?,?,?,?,?,?,?)" rows
-  let decls = genDeclRow path hf
   executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?,?,?,?)" decls
-  let defs = genDefRow path hf
+  let defs = genDefRow path smod refmap
   executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?,?,?,?)" defs
 
 deleteFileFromIndex :: HieDb -> FilePath -> IO ()
