@@ -158,8 +158,8 @@ genDefRow path hf = genRows $ M.keys $ generateReferencesMap $ getAsts $ hie_ast
     go (Right name)
       | Just mod <- nameModule_maybe name
       , mod == hie_module hf
-      , RealSrcSpan sp <- nameSrcSpan name
       , occ  <- nameOccName name
+      , RealSrcSpan sp <- nameSrcSpan name
       , file <- FS.unpackFS $ srcSpanFile sp
       , sl   <- srcSpanStartLine sp
       , sc   <- srcSpanStartCol sp
@@ -169,7 +169,40 @@ genDefRow path hf = genRows $ M.keys $ generateReferencesMap $ getAsts $ hie_ast
     go _ = Nothing
 
 genDeclRow :: FilePath -> HieFile -> [DeclRow]
-genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
+genDeclRow path hf = genRows $ flat $ M.toList $ generateReferencesMap $ getAsts $ hie_asts hf
+  where
+    flat = concatMap (\(a,xs) -> map ((a,) . snd) xs)
+    genRows = mapMaybe go
+    go ((Right name),dets)
+      | Just mod <- nameModule_maybe name
+      , mod == hie_module hf
+      , occ  <- nameOccName name
+      , info <- identInfo dets
+      , Just sp <- getBindSpan info
+      , is_root <- isRoot info
+      , file <- FS.unpackFS $ srcSpanFile sp
+      , sl   <- srcSpanStartLine sp
+      , sc   <- srcSpanStartCol sp
+      , el   <- srcSpanEndLine sp
+      , ec   <- srcSpanEndCol sp
+      = Just $ DeclRow path (moduleName mod) (moduleUnitId mod) occ file sl sc el ec is_root
+    go _ = Nothing
+
+    isRoot = any (\case
+      ValBind InstanceBind _ _ -> True
+      Decl _ _ -> True
+      _ -> False)
+
+    getBindSpan = getFirst . foldMap (First . goDecl)
+    goDecl (ValBind _ _ sp) = sp
+    goDecl (PatternBind _ _ sp) = sp
+    goDecl (Decl _ sp) = sp
+    goDecl (RecField _ sp) = sp
+    goDecl _ = Nothing
+
+
+
+{-
   where
 
     annotations =
@@ -247,6 +280,7 @@ genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
             )
         )
 
+-}
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )
 identifierTree HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren } =
