@@ -123,11 +123,33 @@ data DeclRow
   }
 
 instance ToRow DeclRow where
-  toRow (DeclRow a b c d e f g h i j) = toRow ((a,b,c,d,e,f):.(g,h,i,j))
+  toRow (DeclRow a b c d e f g h i j) = toRow ((a,b,c,d,e):.(f,g,h,i,j))
 
 instance FromRow DeclRow where
-  fromRow = DeclRow <$> field <*> field <*> field <*> field <*> field <*> field
-                   <*> field <*> field <*> field <*> field
+  fromRow = DeclRow <$> field <*> field <*> field <*> field <*> field
+                    <*> field <*> field <*> field <*> field <*> field
+
+data DefRow
+  = DefRow
+  { defSrc :: FilePath
+  , defMod :: ModuleName
+  , defUnit :: UnitId
+  , defNameOcc :: OccName
+  , defFile :: FilePath
+  , defSLine :: Int
+  , defSCol :: Int
+  , defELine :: Int
+  , defECol :: Int
+  }
+
+instance ToRow DefRow where
+  toRow (DefRow a b c d e f g h i) = toRow ((a,b,c,d,e,f):.(g,h,i))
+
+instance FromRow DefRow where
+  fromRow = DefRow <$> field <*> field <*> field
+                   <*> field <*> field <*> field
+                   <*> field <*> field <*> field
+
 
 class Monad m => NameCacheMonad m where
   getNc :: m NameCache

@@ -151,6 +151,23 @@ genRefRow path hf = genRows $ generateRefs $ getAsts $ hie_asts hf
             ec = srcSpanEndCol sp
     go _ = Nothing
 
+genDefRow :: FilePath -> HieFile -> [DefRow]
+genDefRow path hf = genRows $ M.keys $ generateReferencesMap $ getAsts $ hie_asts hf
+  where
+    genRows = mapMaybe go
+    go (Right name)
+      | Just mod <- nameModule_maybe name
+      , mod == hie_module hf
+      , RealSrcSpan sp <- nameSrcSpan name
+      , occ  <- nameOccName name
+      , file <- FS.unpackFS $ srcSpanFile sp
+      , sl   <- srcSpanStartLine sp
+      , sc   <- srcSpanStartCol sp
+      , el   <- srcSpanEndLine sp
+      , ec   <- srcSpanEndCol sp
+      = Just $ DefRow path (moduleName mod) (moduleUnitId mod) occ file sl sc el ec
+    go _ = Nothing
+
 genDeclRow :: FilePath -> HieFile -> [DeclRow]
 genDeclRow path hf = foldMap declRows $ getAsts $ hie_asts hf
   where
