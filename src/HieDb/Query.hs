@@ -86,6 +86,10 @@ findDef conn occ mn muid = do
         Just modrow ->
           findDefInFile occ mdl $ hieModuleHieFile modrow
 
+searchDef :: HieDb -> String -> IO [DefRow]
+searchDef conn cs = do
+  query (getConn conn) "SELECT * from defs WHERE occ LIKE ?" (Only $ '_':cs++"%")
+
 withTarget
   :: HieDb
   -> Either FilePath (ModuleName, Maybe UnitId)
