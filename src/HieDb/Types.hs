@@ -179,7 +179,7 @@ instance Monad m => NameCacheMonad (DbMonadT m) where
 data HieDbErr
   = NotIndexed ModuleName (Maybe UnitId)
   | AmbiguousUnitId (NonEmpty UnitId)
-  | NameNotFound OccName Module
+  | NameNotFound OccName ModuleName (Maybe UnitId)
   | NameUnhelpfulSpan Name String
 
 data Symbol = Symbol

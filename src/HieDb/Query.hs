@@ -66,25 +66,18 @@ lookupHieFile (getConn -> conn) mn uid = do
             ++ show (moduleNameString mn, uid) ++ ". Entries: "
             ++ intercalate ", " (map hieModuleHieFile xs)
 
-findDef :: HieDb -> OccName -> ModuleName -> Maybe UnitId -> IO (Either HieDbErr (RealSrcSpan,Module))
-findDef conn occ mn muid = do
-  euid <- maybe (resolveUnitId conn mn) (return . Right) muid
-  case euid of
-    Left err -> return $ Left err
-    Right uid -> do
-      let mdl = mkModule uid mn
-      mres <- lookupHieFile conn mn uid
-      case mres of
-        Nothing -> do
-          -- Module not indexed. Our next best option is to check if any other files in the
-          -- unit reference this name. We might be able to get a definition from there
-          files <- query (getConn conn)
-                     "SELECT DISTINCT src FROM refs WHERE occ = ? AND mod = ? AND unit = ?"
-                     (occ,mn,uid)
-          maybe (Left $ NameNotFound occ mdl) Right
-            <$> tryAll (findDefInFile occ mdl) (map fromOnly files)
-        Just modrow ->
-          findDefInFile occ mdl $ hieModuleHieFile modrow
+findDef :: HieDb -> OccName -> ModuleName -> Maybe UnitId -> IO [DefRow]
+findDef conn occ mn Nothing
+  = query (getConn conn) "SELECT * from defs WHERE occ = ? AND mod = ?" (occ,mn)
+findDef conn occ mn (Just uid)
+  = query (getConn conn) "SELECT * from defs WHERE occ = ? AND mod = ? AND unit = ?" (occ,mn,uid)
+
+findOneDef :: HieDb -> OccName -> ModuleName -> Maybe UnitId -> IO (Either HieDbErr DefRow)
+findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
+  where
+    wrap [x]    = Right x
+    wrap []     = Left $ NameNotFound occ mn muid
+    wrap (x:xs) = Left $ AmbiguousUnitId (defUnit x :| map defUnit xs)
 
 searchDef :: HieDb -> String -> IO [DefRow]
 searchDef conn cs = do

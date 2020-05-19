@@ -228,12 +228,14 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
     go conn (NameDef nm mn muid) = do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
-      (spn, mdl) <- reportAmbiguousErr =<< findDef conn occ mn muid
-      reportRefSpans [(mdl, (srcSpanStartLine spn , srcSpanStartCol spn), (srcSpanEndLine spn , srcSpanEndCol spn))]
+      row <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      let mdl = mkModule (defUnit row) (defMod row)
+      reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
     go conn (TypeDef nm mn muid) = do
       let occ = mkOccName tcClsName nm
-      (spn, mdl) <- reportAmbiguousErr =<< findDef conn occ mn muid
-      reportRefSpans [(mdl, (srcSpanStartLine spn , srcSpanStartCol spn), (srcSpanEndLine spn , srcSpanEndCol spn))]
+      row <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      let mdl = mkModule (defUnit row) (defMod row)
+      reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
     go conn (Cat target) = hieFileCommand conn target (BS.putStrLn . hie_hs_src)
     go conn Ls = do
       mods <- getAllIndexedMods conn
@@ -311,12 +313,12 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
           UnhelpfulSpan msg -> do
             case nameModule_maybe name of
               Just mod -> do
-                (dsp,mdl) <- reportAmbiguousErr
-                    =<< findDef conn (nameOccName name) (moduleName mod) (Just $ moduleUnitId mod)
+                row <- reportAmbiguousErr
+                    =<< findOneDef conn (nameOccName name) (moduleName mod) (Just $ moduleUnitId mod)
                 putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is defined at:"]
-                reportRefSpans [(mdl
-                                ,(srcSpanStartLine dsp,srcSpanStartCol dsp)
-                                ,(srcSpanEndLine dsp, srcSpanEndCol dsp))]
+                reportRefSpans [(mkModule (defUnit row) (defMod row)
+                                ,(defSLine row,defSCol row)
+                                ,(defELine row,defECol row))]
               Nothing -> do
                 reportAmbiguousErr $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
     go conn (InfoAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
@@ -365,10 +367,10 @@ reportAmbiguousErr (Left (NotIndexed mn muid)) = do
 reportAmbiguousErr (Left (AmbiguousUnitId xs)) = do
   putStrLn $ unwords $ ["UnitId could be any of:",intercalate "," (map show $ toList xs)]
   exitFailure
-reportAmbiguousErr (Left (NameNotFound occ mdl)) = do
+reportAmbiguousErr (Left (NameNotFound occ mn muid)) = do
   putStrLn $ unwords $
     ["Couldn't find name:",occNameString occ,"from module"
-    ,moduleNameString (moduleName mdl)++"("++show (moduleUnitId mdl)++")"]
+    ,moduleNameString mn ++ maybe "" (\uid ->"("++show uid++")") muid]
   exitFailure
 reportAmbiguousErr (Left (NameUnhelpfulSpan nm msg)) = do
   putStrLn $ unwords $

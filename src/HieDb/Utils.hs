@@ -93,7 +93,7 @@ findDefInFile occ mdl file = do
     Just name -> case nameSrcSpan name of
       RealSrcSpan sp -> return $ Right (sp, mdl)
       UnhelpfulSpan msg -> return $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
-    Nothing -> return $ Left $ NameNotFound occ mdl
+    Nothing -> return $ Left $ NameNotFound occ (moduleName mdl) (Just $ moduleUnitId mdl)
 
 pointCommand :: HieFile -> (Int, Int) -> Maybe (Int, Int) -> (HieAST TypeIndex -> a) -> [a]
 pointCommand hf (sl,sc) mep k =
