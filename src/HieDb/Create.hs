@@ -37,6 +37,7 @@ initConn (getConn -> conn) = do
                 \, mod     TEXT NOT NULL \
                 \, unit    TEXT NOT NULL \
                 \, is_boot BOOL NOT NULL \
+                \, hs_src  TEXT \
                 \, time    TEXT NOT NULL \
                 \, CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE \
                 \)"
@@ -85,10 +86,10 @@ addRefsFrom c@(getConn -> conn) path = do
   let isBoot = "boot" `isSuffixOf` path
   case mods of
     (HieModuleRow{}:_) -> return ()
-    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path isBoot time hf
+    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path isBoot Nothing time hf
 
-addRefsFromLoaded :: (MonadIO m) => HieDb -> FilePath -> Bool -> UTCTime -> HieFile -> m ()
-addRefsFromLoaded (getConn -> conn) path isBoot time hf = liftIO $ withTransaction conn $ do
+addRefsFromLoaded :: (MonadIO m) => HieDb -> FilePath -> Bool -> Maybe FilePath -> UTCTime -> HieFile -> m ()
+addRefsFromLoaded (getConn -> conn) path isBoot srcFile time hf = liftIO $ withTransaction conn $ do
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
@@ -97,9 +98,9 @@ addRefsFromLoaded (getConn -> conn) path isBoot time hf = liftIO $ withTransacti
       uid    = moduleUnitId smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
-      modrow = HieModuleRow path (ModuleInfo mod uid isBoot) time
+      modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile time)
 
-  execute conn "INSERT INTO mods VALUES (?,?,?,?,?)" modrow
+  execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?)" modrow
 
   let (rows,decls) = genRefsAndDecls path smod refmap
   executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?,?)" rows

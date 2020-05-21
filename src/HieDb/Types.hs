@@ -34,12 +34,22 @@ newtype HieDb = HieDb { getConn :: Connection }
 setHieTrace :: HieDb -> (Maybe (T.Text -> IO ())) -> IO ()
 setHieTrace (HieDb conn) x = setTrace conn x
 
-data ModuleInfo = ModuleInfo { modInfoName :: ModuleName, modInfoUid :: UnitId, modInfoIsBoot :: Bool }
+data ModuleInfo
+  = ModuleInfo
+  { modInfoName :: ModuleName
+  , modInfoUnit :: UnitId
+  , modInfoIsBoot :: Bool
+  , modInfoSrcFile :: Maybe FilePath
+  , modInfoTime :: UTCTime
+  }
+
+instance Show ModuleInfo where
+  show = show . toRow
 
 instance ToRow ModuleInfo where
-  toRow (ModuleInfo a b c) = toRow (a,b,c)
+  toRow (ModuleInfo a b c d e) = toRow (a,b,c,d,e)
 instance FromRow ModuleInfo where
-  fromRow = ModuleInfo <$> field <*> field <*> field
+  fromRow = ModuleInfo <$> field <*> field <*> field <*> field <*> field
 
 type Res a = a :. ModuleInfo
 
@@ -85,16 +95,15 @@ data HieModuleRow
   = HieModuleRow
   { hieModuleHieFile :: FilePath
   , hieModInfo :: ModuleInfo
-  , hieModuleIndexTime :: UTCTime
   }
 
 instance ToRow HieModuleRow where
-  toRow (HieModuleRow a b c) =
-     toField a : toRow b ++ [toField c]
+  toRow (HieModuleRow a b) =
+     toField a : toRow b
 
 instance FromRow HieModuleRow where
   fromRow =
-    HieModuleRow <$> field <*> fromRow <*> field
+    HieModuleRow <$> field <*> fromRow
 
 data RefRow
   = RefRow
@@ -182,8 +191,8 @@ instance Monad m => NameCacheMonad (DbMonadT m) where
 
 data HieDbErr
   = NotIndexed ModuleName (Maybe UnitId)
-  | AmbiguousUnitId (NonEmpty UnitId)
-  | NameNotFound OccName ModuleName (Maybe UnitId)
+  | AmbiguousUnitId (NonEmpty ModuleInfo)
+  | NameNotFound OccName (Maybe ModuleName) (Maybe UnitId)
   | NameUnhelpfulSpan Name String
 
 data Symbol = Symbol

@@ -75,8 +75,8 @@ data Command
   | Index [FilePath]
   | NameRefs String (Maybe ModuleName) (Maybe UnitId)
   | TypeRefs String (Maybe ModuleName) (Maybe UnitId)
-  | NameDef  String ModuleName (Maybe UnitId)
-  | TypeDef  String ModuleName (Maybe UnitId)
+  | NameDef  String (Maybe ModuleName) (Maybe UnitId)
+  | TypeDef  String (Maybe ModuleName) (Maybe UnitId)
   | Cat HieTarget
   | Ls
   | Rm [HieTarget]
@@ -124,11 +124,11 @@ cmdParser
                                          <*> maybeUnitId)
                          $ progDesc "Lookup references of type MODULE.NAME")
   <> command "name-def" (info (NameDef <$> (strArgument (metavar "NAME"))
-                                       <*> moduleNameParser
+                                       <*> optional moduleNameParser
                                        <*> maybeUnitId)
                          $ progDesc "Lookup definition of value MODULE.NAME")
   <> command "type-def" (info (TypeDef <$> (strArgument (metavar "NAME"))
-                                       <*> moduleNameParser
+                                       <*> optional moduleNameParser
                                        <*> maybeUnitId)
                          $ progDesc "Lookup definition of type MODULE.NAME")
   <> command "cat" (info (Cat <$> hieTarget)
@@ -228,13 +228,13 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
     go conn (NameDef nm mn muid) = do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
-      (row:.info) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
-      let mdl = mkModule (modInfoUid info) (modInfoName info)
+      (row:.inf) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
       reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
     go conn (TypeDef nm mn muid) = do
       let occ = mkOccName tcClsName nm
-      (row:.info) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
-      let mdl = mkModule (modInfoUid info) (modInfoName info)
+      (row:.inf) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
       reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
     go conn (Cat target) = hieFileCommand conn target (BS.putStrLn . hie_hs_src)
     go conn Ls = do
@@ -244,7 +244,7 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
         putStr "\t"
         putStr $ moduleNameString $ modInfoName $ hieModInfo mod
         putStr "\t"
-        putStrLn $ unitIdString $ modInfoUid $ hieModInfo mod
+        putStrLn $ unitIdString $ modInfoUnit $ hieModInfo mod
     go conn (Rm targets) = do
         forM_ targets $ \target -> do
           case target of
@@ -313,10 +313,10 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
           UnhelpfulSpan msg -> do
             case nameModule_maybe name of
               Just mod -> do
-                (row:.info) <- reportAmbiguousErr
-                    =<< findOneDef conn (nameOccName name) (moduleName mod) (Just $ moduleUnitId mod)
+                (row:.inf) <- reportAmbiguousErr
+                    =<< findOneDef conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
                 putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is defined at:"]
-                reportRefSpans [(mkModule (modInfoUid info) (modInfoName info)
+                reportRefSpans [(mkModule (modInfoUnit inf) (modInfoName inf)
                                 ,(defSLine row,defSCol row)
                                 ,(defELine row,defECol row))]
               Nothing -> do
@@ -369,8 +369,8 @@ reportAmbiguousErr (Left (AmbiguousUnitId xs)) = do
   exitFailure
 reportAmbiguousErr (Left (NameNotFound occ mn muid)) = do
   putStrLn $ unwords $
-    ["Couldn't find name:",occNameString occ,"from module"
-    ,moduleNameString mn ++ maybe "" (\uid ->"("++show uid++")") muid]
+    ["Couldn't find name:",occNameString occ
+    ,maybe "" (("from module " ++) . moduleNameString) mn ++ maybe "" (\uid ->"("++show uid++")") muid]
   exitFailure
 reportAmbiguousErr (Left (NameUnhelpfulSpan nm msg)) = do
   putStrLn $ unwords $
@@ -392,6 +392,6 @@ reportRefSpans xs = forM_ xs $ \(mn,(sl,sc),(el,ec)) -> do
 reportRefs :: [Res RefRow] -> IO ()
 reportRefs xs = reportRefSpans
   [ (mdl,(refSLine x, refSCol x),(refELine x, refECol x))
-  | (x:.info) <- xs
-  , let mdl = mkModule (modInfoUid info) (modInfoName info)
+  | (x:.inf) <- xs
+  , let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
   ]

@@ -41,23 +41,23 @@ getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
 resolveUnitId :: HieDb -> ModuleName -> IO (Either HieDbErr UnitId)
 resolveUnitId (getConn -> conn) mn = do
-  luid <- query conn "SELECT unit FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
-  case (luid :: [Only UnitId]) of
+  luid <- query conn "SELECT mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
+  case luid of
     [] -> return $ Left $ NotIndexed mn Nothing
-    [x] -> return $ Right $ fromOnly x
-    (x:xs) -> return $ Left $ AmbiguousUnitId $ coerce $ x :| xs
+    [x] -> return $ Right $ modInfoUnit x
+    (x:xs) -> return $ Left $ AmbiguousUnitId $ x :| xs
 
 search :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res RefRow]
 search (getConn -> conn) occ (Just mn) Nothing =
-  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot \
+  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
              \FROM refs JOIN mods USING (hieFile) \
              \WHERE refs.occ = ? AND refs.mod = ?" (occ, mn)
 search (getConn -> conn) occ (Just mn) (Just uid) =
-  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot \
+  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
              \FROM refs JOIN mods USING (hieFile) \
              \WHERE refs.occ = ? AND refs.mod = ? AND refs.unit = ?" (occ, mn, uid)
 search (getConn -> conn) occ _ _=
-  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot \
+  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
              \FROM refs JOIN mods USING (hieFile) \
              \WHERE refs.occ = ?" (Only occ)
 
@@ -72,27 +72,31 @@ lookupHieFile (getConn -> conn) mn uid = do
             ++ show (moduleNameString mn, uid) ++ ". Entries: "
             ++ intercalate ", " (map hieModuleHieFile xs)
 
-findDef :: HieDb -> OccName -> ModuleName -> Maybe UnitId -> IO [Res DefRow]
-findDef conn occ mn Nothing
-  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot \
+findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
+findDef conn occ Nothing Nothing
+  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
+                         \FROM defs JOIN mods USING (hieFile) \
+                         \WHERE occ = ?" (Only occ)
+findDef conn occ (Just mn) Nothing
+  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ = ? AND mod = ?" (occ,mn)
 findDef conn occ mn (Just uid)
-  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot \
+  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ = ? AND mod = ? AND unit = ?" (occ,mn,uid)
 
-findOneDef :: HieDb -> OccName -> ModuleName -> Maybe UnitId -> IO (Either HieDbErr (Res DefRow))
+findOneDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO (Either HieDbErr (Res DefRow))
 findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
   where
     wrap [x]    = Right x
     wrap []     = Left $ NameNotFound occ mn muid
     wrap (x:xs) = Left $ AmbiguousUnitId (defUnit x :| map defUnit xs)
-    defUnit (_:.i) = modInfoUid i
+    defUnit (_:.i) = i
 
 searchDef :: HieDb -> String -> IO [Res DefRow]
 searchDef conn cs
-  = query (getConn conn) "SELECT defs.*.mods.mod,mods.unit,mods.is_boot \
+  = query (getConn conn) "SELECT defs.*.mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ LIKE ?" (Only $ '_':cs++"%")
 
