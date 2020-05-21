@@ -50,15 +50,15 @@ resolveUnitId (getConn -> conn) mn = do
 search :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res RefRow]
 search (getConn -> conn) occ (Just mn) Nothing =
   query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot \
-             \FROM refs JOIN mods ON refs.src = mods.hieFile \
+             \FROM refs JOIN mods USING (hieFile) \
              \WHERE refs.occ = ? AND refs.mod = ?" (occ, mn)
 search (getConn -> conn) occ (Just mn) (Just uid) =
   query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot \
-             \FROM refs JOIN mods ON refs.src = mods.hieFile \
+             \FROM refs JOIN mods USING (hieFile) \
              \WHERE refs.occ = ? AND refs.mod = ? AND refs.unit = ?" (occ, mn, uid)
 search (getConn -> conn) occ _ _=
   query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot \
-             \FROM refs JOIN mods ON refs.src = mods.hieFile \
+             \FROM refs JOIN mods USING (hieFile) \
              \WHERE refs.occ = ?" (Only occ)
 
 lookupHieFile :: HieDb -> ModuleName -> UnitId -> IO (Maybe HieModuleRow)
@@ -75,11 +75,11 @@ lookupHieFile (getConn -> conn) mn uid = do
 findDef :: HieDb -> OccName -> ModuleName -> Maybe UnitId -> IO [Res DefRow]
 findDef conn occ mn Nothing
   = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot \
-                         \FROM defs JOIN mods ON defs.hieFile = mods.hieFile \
+                         \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ = ? AND mod = ?" (occ,mn)
 findDef conn occ mn (Just uid)
   = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot \
-                         \FROM defs JOIN mods ON defs.hieFile = mods.hieFile \
+                         \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ = ? AND mod = ? AND unit = ?" (occ,mn,uid)
 
 findOneDef :: HieDb -> OccName -> ModuleName -> Maybe UnitId -> IO (Either HieDbErr (Res DefRow))
@@ -93,7 +93,7 @@ findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
 searchDef :: HieDb -> String -> IO [Res DefRow]
 searchDef conn cs
   = query (getConn conn) "SELECT defs.*.mods.mod,mods.unit,mods.is_boot \
-                         \FROM defs JOIN mods ON defs.hieFile = mods.hieFile \
+                         \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ LIKE ?" (Only $ '_':cs++"%")
 
 withTarget
@@ -144,7 +144,7 @@ getGraph (getConn -> conn) = do
   es <-
     query_ conn "SELECT  mods.mod,    decls.hieFile,    decls.occ,    decls.sl,    decls.sc,    decls.el,    decls.ec, \
                        \rmods.mod, ref_decl.hieFile, ref_decl.occ, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec \
-                \FROM decls JOIN refs              ON refs.src      = decls.hieFile \
+                \FROM decls JOIN refs              ON refs.hieFile  = decls.hieFile \
                            \JOIN mods              ON mods.hieFile  = decls.hieFile \
                            \JOIN mods  AS rmods    ON rmods.mod = refs.mod AND rmods.unit = refs.unit AND rmods.is_boot = 0 \
                            \JOIN decls AS ref_decl ON ref_decl.hieFile = rmods.hieFile AND ref_decl.occ = refs.occ \
@@ -152,7 +152,7 @@ getGraph (getConn -> conn) = do
                   \AND ((refs.el < decls.el) OR (refs.el = decls.el AND refs.ec <= decls.ec))"
   vs <-
     query_ conn "SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec \
-                   \FROM decls JOIN mods ON mods.hieFile = decls.hieFile"
+                   \FROM decls JOIN mods USING (hieFile)"
   return $ overlay ( vertices vs ) ( edges ( map (\( x :. y ) -> ( x, y )) es ) )
 
 getVertices :: HieDb -> [Symbol] -> IO [Vertex]
@@ -167,7 +167,7 @@ getVertices (getConn -> conn) ss = Set.toList <$> foldM f Set.empty ss
           m = moduleNameString $ moduleName $ symModule s
           u = unitIdString (moduleUnitId $ symModule s)
       query conn "SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec \
-                 \FROM decls JOIN mods ON mods.hieFile = decls.hieFile \
+                 \FROM decls JOIN mods USING (hieFile) \
                  \WHERE ( decls.occ = ? AND mods.mod = ? AND mods.unit = ? ) " (n, m, u)
 
 getReachable :: HieDb -> [Symbol] -> IO [Vertex]
