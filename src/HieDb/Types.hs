@@ -76,15 +76,18 @@ data HieModuleRow
   { hieModuleHieFile :: FilePath
   , hieModule :: ModuleName
   , hieUnit :: UnitId
+  , hieIsBoot :: Bool
   , hieModuleIndexTime :: UTCTime
   }
 
 instance ToRow HieModuleRow where
-  toRow (HieModuleRow a b c d) =
-     toRow (a, b, c, d)
+  toRow (HieModuleRow a b c d e) =
+     toRow (a, b, c, d, e)
 
 instance FromRow HieModuleRow where
-  fromRow = HieModuleRow <$> field <*> field <*> field <*> field
+  fromRow =
+    HieModuleRow <$> field <*> field <*> field
+                 <*> field <*> field
 
 data RefRow
   = RefRow
