@@ -228,13 +228,13 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
     go conn (NameDef nm mn muid) = do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
-      row <- reportAmbiguousErr =<< findOneDef conn occ mn muid
-      let mdl = mkModule (defUnit row) (defMod row)
+      (row:.info) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      let mdl = mkModule (modInfoUid info) (modInfoName info)
       reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
     go conn (TypeDef nm mn muid) = do
       let occ = mkOccName tcClsName nm
-      row <- reportAmbiguousErr =<< findOneDef conn occ mn muid
-      let mdl = mkModule (defUnit row) (defMod row)
+      (row:.info) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      let mdl = mkModule (modInfoUid info) (modInfoName info)
       reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
     go conn (Cat target) = hieFileCommand conn target (BS.putStrLn . hie_hs_src)
     go conn Ls = do
@@ -242,9 +242,9 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
       forM_ mods $ \mod -> do
         putStr $ hieModuleHieFile mod
         putStr "\t"
-        putStr $ moduleNameString $ hieModule mod
+        putStr $ moduleNameString $ modInfoName $ hieModInfo mod
         putStr "\t"
-        putStrLn $ unitIdString $ hieUnit mod
+        putStrLn $ unitIdString $ modInfoUid $ hieModInfo mod
     go conn (Rm targets) = do
         forM_ targets $ \target -> do
           case target of
@@ -313,10 +313,10 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
           UnhelpfulSpan msg -> do
             case nameModule_maybe name of
               Just mod -> do
-                row <- reportAmbiguousErr
+                (row:.info) <- reportAmbiguousErr
                     =<< findOneDef conn (nameOccName name) (moduleName mod) (Just $ moduleUnitId mod)
                 putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is defined at:"]
-                reportRefSpans [(mkModule (defUnit row) (defMod row)
+                reportRefSpans [(mkModule (modInfoUid info) (modInfoName info)
                                 ,(defSLine row,defSCol row)
                                 ,(defELine row,defECol row))]
               Nothing -> do
@@ -389,9 +389,9 @@ reportRefSpans xs = forM_ xs $ \(mn,(sl,sc),(el,ec)) -> do
   putStr ":"
   putStrLn (show ec)
 
-reportRefs :: [RefRow] -> IO ()
+reportRefs :: [Res RefRow] -> IO ()
 reportRefs xs = reportRefSpans
   [ (mdl,(refSLine x, refSCol x),(refELine x, refECol x))
-  | x <- xs
-  , let mdl = mkModule (refSrcUnit x) (refSrcMod x)
+  | (x:.info) <- xs
+  , let mdl = mkModule (modInfoUid info) (modInfoName info)
   ]

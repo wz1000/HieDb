@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -32,6 +33,15 @@ newtype HieDb = HieDb { getConn :: Connection }
 
 setHieTrace :: HieDb -> (Maybe (T.Text -> IO ())) -> IO ()
 setHieTrace (HieDb conn) x = setTrace conn x
+
+data ModuleInfo = ModuleInfo { modInfoName :: ModuleName, modInfoUid :: UnitId, modInfoIsBoot :: Bool }
+
+instance ToRow ModuleInfo where
+  toRow (ModuleInfo a b c) = toRow (a,b,c)
+instance FromRow ModuleInfo where
+  fromRow = ModuleInfo <$> field <*> field <*> field
+
+type Res a = a :. ModuleInfo
 
 instance ToField ModuleName where
   toField mod = SQLText $ T.pack $ moduleNameString mod
@@ -74,26 +84,21 @@ instance FromField OccName where
 data HieModuleRow
   = HieModuleRow
   { hieModuleHieFile :: FilePath
-  , hieModule :: ModuleName
-  , hieUnit :: UnitId
-  , hieIsBoot :: Bool
+  , hieModInfo :: ModuleInfo
   , hieModuleIndexTime :: UTCTime
   }
 
 instance ToRow HieModuleRow where
-  toRow (HieModuleRow a b c d e) =
-     toRow (a, b, c, d, e)
+  toRow (HieModuleRow a b c) =
+     toField a : toRow b ++ [toField c]
 
 instance FromRow HieModuleRow where
   fromRow =
-    HieModuleRow <$> field <*> field <*> field
-                 <*> field <*> field
+    HieModuleRow <$> field <*> fromRow <*> field
 
 data RefRow
   = RefRow
   { refSrc :: FilePath
-  , refSrcMod :: ModuleName
-  , refSrcUnit :: UnitId
   , refNameOcc :: OccName
   , refNameMod :: ModuleName
   , refNameUnit :: UnitId
@@ -105,17 +110,16 @@ data RefRow
   }
 
 instance ToRow RefRow where
-  toRow (RefRow a b c d e f g h i j k) = toRow ((a,b,c,d,e,f):.(g,h,i,j,k))
+  toRow (RefRow a b c d e f g h i) = toRow ((a,b,c):.(d,e,f):.(g,h,i))
 
 instance FromRow RefRow where
-  fromRow = RefRow <$> field <*> field <*> field <*> field <*> field <*> field
-                   <*> field <*> field <*> field <*> field <*> field
+  fromRow = RefRow <$> field <*> field <*> field
+                   <*> field <*> field <*> field
+                   <*> field <*> field <*> field
 
 data DeclRow
   = DeclRow
   { declSrc :: FilePath
-  , declMod :: ModuleName
-  , declUnit :: UnitId
   , declNameOcc :: OccName
   , declFile :: FilePath
   , declSLine :: Int
@@ -126,17 +130,15 @@ data DeclRow
   }
 
 instance ToRow DeclRow where
-  toRow (DeclRow a b c d e f g h i j) = toRow ((a,b,c,d,e):.(f,g,h,i,j))
+  toRow (DeclRow a b c d e f g h) = toRow ((a,b,c,d):.(e,f,g,h))
 
 instance FromRow DeclRow where
-  fromRow = DeclRow <$> field <*> field <*> field <*> field <*> field
-                    <*> field <*> field <*> field <*> field <*> field
+  fromRow = DeclRow <$> field <*> field <*> field <*> field
+                    <*> field <*> field <*> field <*> field
 
 data DefRow
   = DefRow
   { defSrc :: FilePath
-  , defMod :: ModuleName
-  , defUnit :: UnitId
   , defNameOcc :: OccName
   , defFile :: FilePath
   , defSLine :: Int
@@ -146,11 +148,10 @@ data DefRow
   }
 
 instance ToRow DefRow where
-  toRow (DefRow a b c d e f g h i) = toRow ((a,b,c,d,e,f):.(g,h,i))
+  toRow (DefRow a b c d e f g) = toRow ((a,b,c,d):.(e,f,g))
 
 instance FromRow DefRow where
-  fromRow = DefRow <$> field <*> field <*> field
-                   <*> field <*> field <*> field
+  fromRow = DefRow <$> field <*> field <*> field <*> field
                    <*> field <*> field <*> field
 
 

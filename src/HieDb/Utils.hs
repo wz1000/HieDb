@@ -131,10 +131,8 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
 
     goRef (Right name, (sp,_))
       | Just mod <- nameModule_maybe name = Just $
-          RefRow path smod sunit occ (moduleName mod) (moduleUnitId mod) file sl sc el ec
+          RefRow path occ (moduleName mod) (moduleUnitId mod) file sl sc el ec
           where
-            smod = moduleName smdl
-            sunit = moduleUnitId smdl
             occ = nameOccName name
             file = FS.unpackFS $ srcSpanFile sp
             sl = srcSpanStartLine sp
@@ -155,7 +153,7 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
       , sc   <- srcSpanStartCol sp
       , el   <- srcSpanEndLine sp
       , ec   <- srcSpanEndCol sp
-      = Just $ DeclRow path (moduleName mod) (moduleUnitId mod) occ file sl sc el ec is_root
+      = Just $ DeclRow path occ file sl sc el ec is_root
     goDec _ = Nothing
 
     isRoot = any (\case
@@ -184,7 +182,7 @@ genDefRow path smod refmap = genRows $ M.keys refmap
       , sc   <- srcSpanStartCol sp
       , el   <- srcSpanEndLine sp
       , ec   <- srcSpanEndCol sp
-      = Just $ DefRow path (moduleName mod) (moduleUnitId mod) occ file sl sc el ec
+      = Just $ DefRow path occ file sl sc el ec
     go _ = Nothing
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )
