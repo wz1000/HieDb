@@ -37,7 +37,7 @@ initConn (getConn -> conn) = do
                 \, mod     TEXT NOT NULL \
                 \, unit    TEXT NOT NULL \
                 \, is_boot BOOL NOT NULL \
-                \, hs_src  TEXT \
+                \, hs_src  TEXT UNIQUE ON CONFLICT REPLACE \
                 \, time    TEXT NOT NULL \
                 \, CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE \
                 \)"

@@ -72,6 +72,17 @@ lookupHieFile (getConn -> conn) mn uid = do
             ++ show (moduleNameString mn, uid) ++ ". Entries: "
             ++ intercalate ", " (map hieModuleHieFile xs)
 
+lookupHieFileFromSource :: HieDb -> FilePath -> IO (Maybe HieModuleRow)
+lookupHieFileFromSource (getConn -> conn) fp = do
+  files <- query conn "SELECT * FROM mods WHERE hs_src = ?" (Only fp)
+  case files of
+    [] -> return Nothing
+    [x] -> return $ Just x
+    xs ->
+      error $ "DB invariant violated, hs_src in mods not unique: "
+            ++ show fp ++ ". Entries: "
+            ++ intercalate ", " (map (show . toRow) xs)
+
 findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
 findDef conn occ Nothing Nothing
   = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
