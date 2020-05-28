@@ -18,6 +18,7 @@ import qualified Data.Text as T
 
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
+import Control.Exception
 
 import Data.List.NonEmpty (NonEmpty(..))
 
@@ -30,6 +31,13 @@ import Database.SQLite.Simple.FromField
 import qualified Text.ParserCombinators.ReadP as R
 
 newtype HieDb = HieDb { getConn :: Connection }
+
+data HieDbException
+  = IncompatibleSchemaVersion
+  { expectedVersion :: Integer, gotVersion :: Integer }
+  deriving (Eq,Ord,Show)
+
+instance Exception HieDbException where
 
 setHieTrace :: HieDb -> (Maybe (T.Text -> IO ())) -> IO ()
 setHieTrace (HieDb conn) x = setTrace conn x

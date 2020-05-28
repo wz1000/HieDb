@@ -14,18 +14,38 @@ import HieTypes
 import HieUtils
 
 import Control.Monad.IO.Class
+import Control.Exception
 
 import System.Directory
 
 import Database.SQLite.Simple
 import Data.Time.Clock
 import Data.List ( isSuffixOf )
+import Data.String
 
 import HieDb.Types
 import HieDb.Utils
 
+sCHEMA_VERSION :: Integer
+sCHEMA_VERSION = 1
+
+dB_VERSION :: Integer
+dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
+
+
+checkVersion :: (HieDb -> IO a) -> (HieDb -> IO a)
+checkVersion k db@(getConn -> conn) = do
+  [Only ver] <- query_ conn "PRAGMA user_version"
+  if ver == 0 then do
+    execute_ conn $ fromString $ "PRAGMA user_version = " ++ show dB_VERSION
+    k db
+  else if ver == dB_VERSION then do
+    k db
+  else
+    throwIO $ IncompatibleSchemaVersion dB_VERSION ver
+
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
-withHieDb fp f = withConnection fp (f . HieDb)
+withHieDb fp f = withConnection fp (checkVersion f . HieDb)
 
 initConn :: HieDb -> IO ()
 initConn (getConn -> conn) = do
