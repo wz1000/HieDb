@@ -106,7 +106,7 @@ findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
 
 searchDef :: HieDb -> String -> IO [Res DefRow]
 searchDef conn cs
-  = query (getConn conn) "SELECT defs.*.mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
+  = query (getConn conn) "SELECT defs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ LIKE ?" (Only $ '_':cs++"%")
 
