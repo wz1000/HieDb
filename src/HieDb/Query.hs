@@ -82,6 +82,15 @@ lookupHieFileFromSource (getConn -> conn) fp = do
             ++ show fp ++ ". Entries: "
             ++ intercalate ", " (map (show . toRow) xs)
 
+findTypeRefs :: HieDb -> OccName -> ModuleName -> UnitId -> IO [Res TypeRef]
+findTypeRefs (getConn -> conn) occ mn uid
+  = query conn  "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
+                \FROM typerefs JOIN mods ON typerefs.hieFile = mods.hieFile \
+                              \JOIN typenames ON typerefs.id = typenames.id \
+                \WHERE typenames.name = ? AND typenames.mod = ? AND typenames.unit = ? \
+                       \ORDER BY typerefs.depth ASC"
+                (occ,mn,uid)
+
 findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
 findDef conn occ Nothing Nothing
   = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
@@ -91,7 +100,11 @@ findDef conn occ (Just mn) Nothing
   = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ = ? AND mod = ?" (occ,mn)
-findDef conn occ mn (Just uid)
+findDef conn occ Nothing (Just uid)
+  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
+                         \FROM defs JOIN mods USING (hieFile) \
+                         \WHERE occ = ? AND unit = ?" (occ,uid)
+findDef conn occ (Just mn) (Just uid)
   = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ = ? AND mod = ? AND unit = ?" (occ,mn,uid)

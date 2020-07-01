@@ -23,6 +23,7 @@ import Control.Exception
 import Data.List.NonEmpty (NonEmpty(..))
 
 import Data.Time.Clock
+import Data.Int
 
 import Database.SQLite.Simple
 import Database.SQLite.Simple.ToField
@@ -153,6 +154,30 @@ instance FromRow DeclRow where
   fromRow = DeclRow <$> field <*> field <*> field <*> field
                     <*> field <*> field <*> field <*> field
 
+data TypeName = TypeName
+  { typeName :: OccName
+  , typeMod :: ModuleName
+  , typeUnit :: UnitId
+  }
+
+data TypeRef = TypeRef
+  { typeRefOccId :: Int64
+  , typeRefHieFile :: FilePath
+  , typeRefDepth :: Int
+  , typeRefFile :: FilePath
+  , typeRefSLine :: Int
+  , typeRefSCol :: Int
+  , typeRefELine :: Int
+  , typeRefECol :: Int
+  }
+
+instance ToRow TypeRef where
+  toRow (TypeRef a b c d e f g h) = toRow ((a,b,c,d):.(e,f,g,h))
+
+instance FromRow TypeRef where
+  fromRow = TypeRef <$> field <*> field <*> field <*> field
+                    <*> field <*> field <*> field <*> field
+
 data DefRow
   = DefRow
   { defSrc :: FilePath
@@ -162,14 +187,17 @@ data DefRow
   , defSCol :: Int
   , defELine :: Int
   , defECol :: Int
+  , defType :: Maybe String
+  , defDoc :: Maybe String
   }
 
 instance ToRow DefRow where
-  toRow (DefRow a b c d e f g) = toRow ((a,b,c,d):.(e,f,g))
+  toRow (DefRow a b c d e f g h i) = toRow ((a,b,c,d):.(e,f,g,h,i))
 
 instance FromRow DefRow where
   fromRow = DefRow <$> field <*> field <*> field <*> field
-                   <*> field <*> field <*> field
+                   <*> field <*> field <*> field <*> field
+                   <*> field
 
 
 class Monad m => NameCacheMonad m where

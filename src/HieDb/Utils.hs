@@ -26,6 +26,13 @@ import DynFlags
 import SysTools
 import GHC.Paths (libdir)
 
+
+#if __GLASGOW_HASKELL__ >= 810
+import GHC.Hs.Doc
+#else
+import HsDoc
+#endif
+
 import qualified Data.Map as M
 
 import qualified FastString as FS
@@ -35,6 +42,7 @@ import System.FilePath
 
 import Control.Arrow ( (&&&) )
 import Data.Bifunctor ( bimap )
+import Data.List (find)
 import Control.Monad.IO.Class
 
 import Data.Char
@@ -168,21 +176,34 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
     goDecl (RecField _ sp) = sp
     goDecl _ = Nothing
 
-genDefRow :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> [DefRow]
-genDefRow path smod refmap = genRows $ M.keys refmap
+genDefRow :: FilePath -> Module -> DeclDocMap -> M.Map Identifier [(Span, IdentifierDetails a)] -> (a -> String) -> [DefRow]
+genDefRow path smod (DeclDocMap docmap) refmap printType = genRows $ M.toList refmap
   where
     genRows = mapMaybe go
-    go (Right name)
+    getSpan name dets
+      | RealSrcSpan sp <- nameSrcSpan name = Just sp
+      | otherwise = do
+          (sp, dets) <- find defSpan dets
+          pure sp
+
+    defSpan = any isDef . identInfo . snd
+    isDef (ValBind RegularBind _ _) = True
+    isDef PatternBind{}             = True
+    isDef Decl{}                    = True
+    isDef _                         = False
+
+    go ((Right name),dets)
       | Just mod <- nameModule_maybe name
       , mod == smod
       , occ  <- nameOccName name
-      , RealSrcSpan sp <- nameSrcSpan name
+      , Just sp <- getSpan name dets
       , file <- FS.unpackFS $ srcSpanFile sp
       , sl   <- srcSpanStartLine sp
       , sc   <- srcSpanStartCol sp
       , el   <- srcSpanEndLine sp
       , ec   <- srcSpanEndCol sp
-      = Just $ DefRow path occ file sl sc el ec
+      , let typ = getFirst $ foldMap (First . identType . snd) dets
+      = Just $ DefRow path occ file sl sc el ec (printType <$> typ) (unpackHDS <$> M.lookup name docmap)
     go _ = Nothing
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )

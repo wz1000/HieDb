@@ -36,6 +36,7 @@ library
   -- other-extensions:
   build-depends:       base
                      , ghc >= 8.7
+                     , array
                      , containers
                      , ghc-paths
                      , filepath
@@ -51,4 +52,4 @@ library
                      , lucid
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options: -Wall
+  ghc-options: -Wall -fwrite-ide-info -hiedir=.hie
