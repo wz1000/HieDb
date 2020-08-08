@@ -109,7 +109,7 @@ initConn (getConn -> conn) = do
                 \, ec      INTEGER NOT NULL \
                 \, type    TEXT             \
                 \, docs    TEXT             \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) DEFERRABLE INITIALLY DEFERREDi \
+                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) DEFERRABLE INITIALLY DEFERRED \
                 \, PRIMARY KEY(hieFile,occ) \
                 \)"
 
