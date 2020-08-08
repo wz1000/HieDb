@@ -184,9 +184,9 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
     arr = hie_types hf
     asts = M.elems $ getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
-    addTypesFromAst ast = case nodeChildren ast of
-      [] -> mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ nodeType $ nodeInfo ast
-      xs -> mapM_ addTypesFromAst xs
+    addTypesFromAst ast = do
+      mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ nodeType $ nodeInfo ast
+      mapM_ addTypesFromAst $ nodeChildren ast
 
 addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m ()
 addRefsFrom c@(getConn -> conn) path = do
