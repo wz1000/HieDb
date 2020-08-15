@@ -18,20 +18,13 @@ executable hiedb
   -- other-modules:
   -- other-extensions:
   build-depends:       base
-                     , ghc >= 8.7
-                     , containers
-                     , directory
-                     , text
-                     , optparse-applicative
-                     , terminal-size
-                     , bytestring
                      , hiedb
   ghc-options: -Wall
   default-language:    Haskell2010
 
 library
   hs-source-dirs:      src
-  exposed-modules:     HieDb, HieDb.Utils, HieDb.Create, HieDb.Query, HieDb.Types, HieDb.Dump, HieDb.Html
+  exposed-modules:     HieDb, HieDb.Utils, HieDb.Create, HieDb.Query, HieDb.Types, HieDb.Dump, HieDb.Html, HieDb.Run
   -- other-modules:
   -- other-extensions:
   build-depends:       base
@@ -50,6 +43,8 @@ library
                      , algebraic-graphs
                      , tree-traversals
                      , lucid
+                     , optparse-applicative
+                     , terminal-size
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options: -Wall -fwrite-ide-info -hiedir=.hie
