@@ -84,7 +84,7 @@ initConn (getConn -> conn) = do
                 \, sc   INTEGER NOT NULL \
                 \, el   INTEGER NOT NULL \
                 \, ec   INTEGER NOT NULL \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) DEFERRABLE INITIALLY DEFERRED \
+                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS decls \
@@ -96,7 +96,7 @@ initConn (getConn -> conn) = do
                 \, el      INTEGER NOT NULL \
                 \, ec      INTEGER NOT NULL \
                 \, is_root    BOOL NOT NULL \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) DEFERRABLE INITIALLY DEFERRED \
+                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS defs \
@@ -109,7 +109,7 @@ initConn (getConn -> conn) = do
                 \, ec      INTEGER NOT NULL \
                 \, type    TEXT             \
                 \, docs    TEXT             \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) DEFERRABLE INITIALLY DEFERRED \
+                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \, PRIMARY KEY(hieFile,occ) \
                 \)"
 
@@ -131,7 +131,7 @@ initConn (getConn -> conn) = do
                 \, el      INTEGER NOT NULL \
                 \, ec      INTEGER NOT NULL \
                 \, FOREIGN KEY(id) REFERENCES typenames(id) DEFERRABLE INITIALLY DEFERRED \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) DEFERRABLE INITIALLY DEFERRED \
+                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
 
 addArr :: HieDb -> A.Array TypeIndex HieTypeFlat -> IO (A.Array TypeIndex (Maybe Int64))
@@ -202,6 +202,7 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile time hf docs = liftIO
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM typerefs WHERE hieFile = ?" (Only path)
 
   let mod    = moduleName smod
       uid    = moduleUnitId smod

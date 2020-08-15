@@ -50,15 +50,15 @@ search :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res RefRow
 search (getConn -> conn) occ (Just mn) Nothing =
   query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
              \FROM refs JOIN mods USING (hieFile) \
-             \WHERE refs.occ = ? AND refs.mod = ?" (occ, mn)
+             \WHERE refs.occ = ? AND refs.mod = ? AND mods.hs_src IS NOT NULL" (occ, mn)
 search (getConn -> conn) occ (Just mn) (Just uid) =
   query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
              \FROM refs JOIN mods USING (hieFile) \
-             \WHERE refs.occ = ? AND refs.mod = ? AND refs.unit = ?" (occ, mn, uid)
+             \WHERE refs.occ = ? AND refs.mod = ? AND refs.unit = ? AND mods.hs_src IS NOT NULL" (occ, mn, uid)
 search (getConn -> conn) occ _ _=
   query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
              \FROM refs JOIN mods USING (hieFile) \
-             \WHERE refs.occ = ?" (Only occ)
+             \WHERE refs.occ = ? AND mods.hs_src IS NOT NULL" (Only occ)
 
 lookupHieFile :: HieDb -> ModuleName -> UnitId -> IO (Maybe HieModuleRow)
 lookupHieFile (getConn -> conn) mn uid = do
