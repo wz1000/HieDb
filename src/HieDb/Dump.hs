@@ -17,8 +17,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified UniqSupply
 
-dump :: FilePath -> IO ()
-dump hieFilePath = do
+dump :: FilePath -> FilePath -> IO ()
+dump libdir hieFilePath = do
   nameCache <- do
     uniqueSupply <-
       UniqSupply.mkSplitUniqSupply 'z'
@@ -37,7 +37,7 @@ dump hieFilePath = do
         Map.! head ( Map.keys ( HieTypes.getAsts hie_asts ) )
 
   dynFlags <-
-    dynFlagsForPrinting
+    dynFlagsForPrinting libdir
 
   putStrLn
     ( Outputable.showSDoc

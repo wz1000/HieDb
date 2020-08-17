@@ -24,8 +24,6 @@ import UniqSupply
 import SrcLoc
 import DynFlags
 import SysTools
-import GHC.Paths (libdir)
-
 
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Doc
@@ -116,8 +114,8 @@ pointCommand hf (sl,sc) mep k =
      Just (el,ec) -> mkRealSrcLoc fs el ec
    sp fs = mkRealSrcSpan (sloc fs) (eloc fs)
 
-dynFlagsForPrinting :: IO DynFlags
-dynFlagsForPrinting = do
+dynFlagsForPrinting :: FilePath -> IO DynFlags
+dynFlagsForPrinting libdir = do
   systemSettings <- initSysTools libdir
 #if __GLASGOW_HASKELL__ >= 810
   return $ defaultDynFlags systemSettings $ LlvmConfig [] []

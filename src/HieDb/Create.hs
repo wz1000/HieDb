@@ -56,7 +56,12 @@ checkVersion k db@(getConn -> conn) = do
     throwIO $ IncompatibleSchemaVersion dB_VERSION ver
 
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
-withHieDb fp f = withConnection fp (checkVersion f . HieDb)
+withHieDb fp f = withConnection fp (checkVersion f . flip HieDb Nothing)
+
+withHieDb' :: FilePath -> FilePath -> (HieDb -> IO a) -> IO a
+withHieDb' libdir fp f = do
+  df <- dynFlagsForPrinting libdir
+  withConnection fp (checkVersion f . flip HieDb (Just df))
 
 initConn :: HieDb -> IO ()
 initConn (getConn -> conn) = do
@@ -218,8 +223,9 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile time hf docs = liftIO
 
   ixs <- addArr db (hie_types hf)
 
-  df <- dynFlagsForPrinting
-  let printType = renderHieType df . flip recoverFullType (hie_types hf)
+  let printType = case getDbDynFlags db of
+        Just df -> renderHieType df . flip recoverFullType (hie_types hf)
+        Nothing -> const ""
   let defs = genDefRow path smod docs refmap printType
   executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?,?,?,?)" defs
 

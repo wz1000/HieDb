@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
@@ -13,6 +14,7 @@ import Prelude hiding (mod)
 import Name
 import Module
 import NameCache
+import DynFlags
 
 import qualified Data.Text as T
 
@@ -31,7 +33,7 @@ import Database.SQLite.Simple.FromField
 
 import qualified Text.ParserCombinators.ReadP as R
 
-newtype HieDb = HieDb { getConn :: Connection }
+data HieDb = HieDb { getConn :: Connection, getDbDynFlags :: Maybe DynFlags }
 
 data HieDbException
   = IncompatibleSchemaVersion
@@ -41,7 +43,7 @@ data HieDbException
 instance Exception HieDbException where
 
 setHieTrace :: HieDb -> (Maybe (T.Text -> IO ())) -> IO ()
-setHieTrace (HieDb conn) x = setTrace conn x
+setHieTrace (getConn -> conn) x = setTrace conn x
 
 data ModuleInfo
   = ModuleInfo

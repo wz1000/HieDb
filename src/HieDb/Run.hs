@@ -42,13 +42,13 @@ import Options.Applicative
 import HieDb
 import HieDb.Dump
 
-hiedbMain :: IO ()
-hiedbMain = do
+hiedbMain :: FilePath -> IO ()
+hiedbMain libdir = do
   defaultLoc <- getXdgDirectory XdgData "default.hiedb"
   defdb <- fromMaybe defaultLoc <$> lookupEnv "HIEDB"
   hSetBuffering stdout NoBuffering
   (opts, cmd) <- execParser $ progParseInfo defdb
-  runCommand opts cmd
+  runCommand libdir opts cmd
 
 
 {- USAGE
@@ -199,8 +199,8 @@ progress l total cur act f = do
   liftIO $ putStr " done\r"
   return x
 
-runCommand :: Options -> Command -> IO ()
-runCommand opts c = withHieDb (database opts) $ \conn -> do
+runCommand :: FilePath -> Options -> Command -> IO ()
+runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
   when (trace opts) $
     setHieTrace conn (Just $ T.hPutStrLn stderr . ("\n****TRACE: "<>))
   go conn c
@@ -298,7 +298,7 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
     go conn (TypesAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
       let types' = concat $ pointCommand hf sp mep $ nodeType . nodeInfo
           types = map (flip recoverFullType $ hie_types hf) types'
-      dynFlags <- dynFlagsForPrinting
+      let Just dynFlags = getDbDynFlags conn
       forM_ types $ \typ -> do
         putStrLn $ renderHieType dynFlags typ
     go conn (DefsAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
@@ -322,13 +322,13 @@ runCommand opts c = withHieDb (database opts) $ \conn -> do
               Nothing -> do
                 reportAmbiguousErr $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
     go conn (InfoAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
-      dynFlags <- dynFlagsForPrinting
+      let Just dynFlags = getDbDynFlags conn
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
         (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
     go conn RefGraph =
       declRefs conn
     go _ (Dump path) =
-      dump path
+      dump libdir path
     go conn (Reachable s) = getReachable conn s >>= mapM_ print
     go conn (Unreachable s) = getUnreachable conn s >>= mapM_ print
     go conn (Html s) = html conn s
