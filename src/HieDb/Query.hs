@@ -121,7 +121,8 @@ searchDef :: HieDb -> String -> IO [Res DefRow]
 searchDef conn cs
   = query (getConn conn) "SELECT defs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
-                         \WHERE occ LIKE ?" (Only $ '_':cs++"%")
+                         \WHERE occ LIKE ? \
+                         \LIMIT 200" (Only $ '_':cs++"%")
 
 withTarget
   :: HieDb
