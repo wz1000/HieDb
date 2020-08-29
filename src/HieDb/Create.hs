@@ -36,6 +36,7 @@ import qualified Data.Map as M
 import FastString as FS
 import qualified Data.Text.IO as T
 import System.IO
+import Data.Maybe
 
 sCHEMA_VERSION :: Integer
 sCHEMA_VERSION = 1
@@ -190,7 +191,9 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
     asts = M.elems $ getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
-      mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ nodeType $ nodeInfo ast
+      mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ mapMaybe identType $ M.elems $ nodeIdentifiers $ nodeInfo ast
+      when (null $ nodeChildren ast) $
+        mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ nodeType $ nodeInfo ast
       mapM_ addTypesFromAst $ nodeChildren ast
 
 addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m ()
