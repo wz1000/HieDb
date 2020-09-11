@@ -44,7 +44,7 @@ import HieDb.Dump
 
 hiedbMain :: FilePath -> IO ()
 hiedbMain libdir = do
-  defaultLoc <- getXdgDirectory XdgData "default.hiedb"
+  defaultLoc <- getXdgDirectory XdgData $ "default_"++ show dB_VERSION ++".hiedb"
   defdb <- fromMaybe defaultLoc <$> lookupEnv "HIEDB"
   hSetBuffering stdout NoBuffering
   (opts, cmd) <- execParser $ progParseInfo defdb
