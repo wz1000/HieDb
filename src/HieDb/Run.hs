@@ -7,8 +7,8 @@ module HieDb.Run where
 import Prelude hiding (mod)
 
 import GHC
-import HieTypes
-import HieUtils
+import Compat.HieTypes
+import Compat.HieUtils
 import Name
 import Module
 import Outputable ((<+>),hang,showSDoc,ppr,text)
@@ -34,6 +34,7 @@ import Data.Maybe
 import Data.Either
 import Data.List (intercalate)
 import Data.Foldable
+import Data.IORef
 
 import qualified Data.ByteString.Char8 as BS
 
@@ -209,10 +210,10 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
     go conn (Index dirs) = do
       initConn conn
       files <- concat <$> mapM getHieFilesIn dirs
-      nc <- makeNc
+      nc <- newIORef =<< makeNc
       wsize <- maybe 80 width <$> size
       let progress' = if quiet opts then (\_ _ _ k -> k) else progress
-      evalDbM nc $ sequence_ $
+      runDbM nc $ sequence_ $
         zipWith (\f n -> progress' wsize (length files) n (addRefsFrom conn) f) files [0..]
       unless (quiet opts) $
         putStrLn "\nCompleted!"

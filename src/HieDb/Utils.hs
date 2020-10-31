@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE CPP #-}
 module HieDb.Utils where
 
@@ -14,9 +15,10 @@ import qualified Data.Tree
 
 import Prelude hiding (mod)
 
-import HieBin
-import HieTypes
-import HieUtils
+import Compat.HieBin
+import Compat.HieTypes
+import qualified Compat.HieTypes as HieTypes
+import Compat.HieUtils
 import Name
 import Module
 import NameCache
@@ -42,12 +44,47 @@ import Control.Arrow ( (&&&) )
 import Data.Bifunctor ( bimap )
 import Data.List (find)
 import Control.Monad.IO.Class
+import qualified Data.Array as A
 
 import Data.Char
+import Data.Int
 import Data.Maybe
 import Data.Monoid
+import Data.IORef
 
 import HieDb.Types
+import Database.SQLite.Simple
+
+addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
+addTypeRef (getConn -> conn) hf arr ixs sp = go 0
+  where
+    file = FS.unpackFS $ srcSpanFile sp
+    sl = srcSpanStartLine sp
+    sc = srcSpanStartCol sp
+    el = srcSpanEndLine sp
+    ec = srcSpanEndCol sp
+    go :: TypeIndex -> Int -> IO ()
+    go d i = do
+      case ixs A.! i of
+        Nothing -> pure ()
+        Just occ -> do
+          let ref = TypeRef occ hf d file sl sc el ec
+          execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?,?)" ref
+      let next = go (d+1)
+      case arr A.! i of
+        HTyVarTy _ -> pure ()
+#if __GLASGOW_HASKELL__ >= 808
+        HAppTy x (HieArgs xs) -> mapM_ next (x:map snd xs)
+#else
+        HAppTy x y -> mapM_ next [x,y]
+#endif
+        HTyConApp _ (HieArgs xs) -> mapM_ next (map snd xs)
+        HForAllTy ((_ , a),_) b -> mapM_ next [a,b]
+        HFunTy a b -> mapM_ next [a,b]
+        HQualTy a b -> mapM_ next [a,b]
+        HLitTy _ -> pure ()
+        HCastTy a -> next a
+        HCoercionTy -> pure ()
 
 makeNc :: IO NameCache
 makeNc = do
@@ -76,9 +113,8 @@ withHieFile :: (NameCacheMonad m, MonadIO m)
             -> (HieFile -> m a)
             -> m a
 withHieFile path act = do
-  nc <- getNc
-  (hiefile, nc') <- liftIO $ readHieFile nc path
-  putNc nc'
+  nc <- getNcUpdater
+  hiefile <- liftIO $ readHieFile nc path
   act (hie_file_result hiefile)
 
 tryAll :: Monad m => (a -> m (Either b c)) -> [a] -> m (Maybe c)
@@ -93,9 +129,10 @@ tryAll f (x:xs) = do
 -- it by loading it and then looking for the name in NameCache
 findDefInFile :: OccName -> Module -> FilePath -> IO (Either HieDbErr (RealSrcSpan,Module))
 findDefInFile occ mdl file = do
-  nc <- makeNc
-  nc' <- execDbM nc $ withHieFile file (const $ return ())
-  case lookupOrigNameCache (nsNames nc') mdl occ of
+  ncr <- newIORef =<< makeNc
+  _ <- runDbM ncr $ withHieFile file (const $ return ())
+  nc <- readIORef ncr
+  case lookupOrigNameCache (nsNames nc) mdl occ of
     Just name -> case nameSrcSpan name of
       RealSrcSpan sp -> return $ Right (sp, mdl)
       UnhelpfulSpan msg -> return $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
@@ -116,7 +153,12 @@ pointCommand hf (sl,sc) mep k =
 
 dynFlagsForPrinting :: FilePath -> IO DynFlags
 dynFlagsForPrinting libdir = do
-  systemSettings <- initSysTools libdir
+  systemSettings <- initSysTools
+#if __GLASGOW_HASKELL__ >= 808
+                    libdir
+#else
+                    (Just libdir)
+#endif
 #if __GLASGOW_HASKELL__ >= 810
   return $ defaultDynFlags systemSettings $ LlvmConfig [] []
 #else
@@ -181,7 +223,7 @@ genDefRow path smod (DeclDocMap docmap) refmap printType = genRows $ M.toList re
     getSpan name dets
       | RealSrcSpan sp <- nameSrcSpan name = Just sp
       | otherwise = do
-          (sp, dets) <- find defSpan dets
+          (sp, _dets) <- find defSpan dets
           pure sp
 
     defSpan = any isDef . identInfo . snd

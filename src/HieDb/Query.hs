@@ -10,7 +10,7 @@ import           Algebra.Graph.AdjacencyMap.Algorithm (dfs)
 import           Algebra.Graph.Export.Dot
 
 import           GHC
-import           HieTypes
+import           Compat.HieTypes
 import           Module
 import           Name
 
@@ -26,6 +26,7 @@ import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.IORef
 
 import Database.SQLite.Simple hiding ((:=))
 
@@ -131,8 +132,8 @@ withTarget
   -> IO (Either HieDbErr a)
 withTarget conn (Left x') f = do
   x <- canonicalizePath x'
-  nc <- makeNc
-  evalDbM nc $ do
+  nc <- newIORef =<< makeNc
+  runDbM nc $ do
     addRefsFrom conn x
     Right <$> withHieFile x (return . f)
 withTarget conn (Right (mn, muid)) f = do
@@ -144,8 +145,8 @@ withTarget conn (Right (mn, muid)) f = do
       case mFile of
         Nothing -> return $ Left (NotIndexed mn $ Just uid)
         Just x -> do
-          nc <- makeNc
-          evalDbM nc $ do
+          nc <- newIORef =<< makeNc
+          runDbM nc $ do
             file <- liftIO $ canonicalizePath (hieModuleHieFile x)
             addRefsFrom conn file
             Right <$> withHieFile file (return . f)

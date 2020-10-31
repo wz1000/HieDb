@@ -12,8 +12,8 @@ module HieDb.Create where
 import Prelude hiding (mod)
 
 import GHC
-import HieTypes
-import HieUtils
+import Compat.HieTypes
+import Compat.HieUtils
 import IfaceType
 import Name
 
@@ -156,33 +156,6 @@ addArr (getConn -> conn) arr = do
             uid = moduleUnitId m
         execute conn "INSERT INTO typenames(name,mod,unit) VALUES (?,?,?)" (occ,mod,uid)
         Just . fromOnly . head <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
-
-addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
-addTypeRef (getConn -> conn) hf arr ixs sp = go 0
-  where
-    file = FS.unpackFS $ srcSpanFile sp
-    sl = srcSpanStartLine sp
-    sc = srcSpanStartCol sp
-    el = srcSpanEndLine sp
-    ec = srcSpanEndCol sp
-    go :: TypeIndex -> Int -> IO ()
-    go d i = do
-      case ixs A.! i of
-        Nothing -> pure ()
-        Just occ -> do
-          let ref = TypeRef occ hf d file sl sc el ec
-          execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?,?)" ref
-      let next = go (d+1)
-      case arr A.! i of
-        HTyVarTy _ -> pure ()
-        HAppTy x (HieArgs xs) -> mapM_ next (x:map snd xs)
-        HTyConApp _ (HieArgs xs) -> mapM_ next (map snd xs)
-        HForAllTy ((_ , a),_) b -> mapM_ next [a,b]
-        HFunTy a b -> mapM_ next [a,b]
-        HQualTy a b -> mapM_ next [a,b]
-        HLitTy _ -> pure ()
-        HCastTy a -> next a
-        HCoercionTy -> pure ()
 
 addTypeRefs :: HieDb -> FilePath -> HieFile -> A.Array TypeIndex (Maybe Int64) -> IO ()
 addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts

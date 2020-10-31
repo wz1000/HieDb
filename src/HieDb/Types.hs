@@ -15,11 +15,13 @@ import Name
 import Module
 import NameCache
 import DynFlags
+import IfaceEnv (NameCacheUpdater(..))
+import Data.IORef
 
 import qualified Data.Text as T
 
 import Control.Monad.IO.Class
-import Control.Monad.State.Strict
+import Control.Monad.Reader
 import Control.Exception
 
 import Data.List.NonEmpty (NonEmpty(..))
@@ -203,10 +205,9 @@ instance FromRow DefRow where
 
 
 class Monad m => NameCacheMonad m where
-  getNc :: m NameCache
-  putNc :: NameCache -> m ()
+  getNcUpdater :: m NameCacheUpdater
 
-newtype DbMonadT m a = DbMonadT { runDbMonad :: StateT NameCache m a } deriving (MonadTrans)
+newtype DbMonadT m a = DbMonadT { runDbMonad :: ReaderT (IORef NameCache) m a } deriving (MonadTrans)
 deriving instance Monad m => Functor (DbMonadT m)
 deriving instance Monad m => Applicative (DbMonadT m)
 deriving instance Monad m => Monad (DbMonadT m)
@@ -214,18 +215,12 @@ deriving instance MonadIO m => MonadIO (DbMonadT m)
 
 type DbMonad = DbMonadT IO
 
-evalDbM :: NameCache -> DbMonad a -> IO a
-evalDbM nc x = flip evalStateT nc $ runDbMonad x
+runDbM :: IORef NameCache -> DbMonad a -> IO a
+runDbM nc x = flip runReaderT nc $ runDbMonad x
 
-execDbM :: NameCache -> DbMonad a -> IO NameCache
-execDbM nc x = flip execStateT nc $ runDbMonad x
+instance MonadIO m => NameCacheMonad (DbMonadT m) where
+  getNcUpdater = DbMonadT $ ReaderT $ \ref -> pure (NCU $ atomicModifyIORef' ref)
 
-runDbM :: NameCache -> DbMonad a -> IO (a,NameCache)
-runDbM nc x = flip runStateT nc $ runDbMonad x
-
-instance Monad m => NameCacheMonad (DbMonadT m) where
-  getNc = DbMonadT get
-  putNc = DbMonadT . put
 
 data HieDbErr
   = NotIndexed ModuleName (Maybe UnitId)
