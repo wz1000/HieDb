@@ -5,7 +5,6 @@ module HieDb.Dump where
 
 import qualified Data.Map.Strict as Map
 import qualified Compat.HieBin as HieBin
-import           Compat.HieBin ( HieFileResult( HieFileResult ) )
 import           HieDb.Utils ( dynFlagsForPrinting )
 import qualified Compat.HieDebug as HieDebug
 import qualified Compat.HieTypes as HieTypes

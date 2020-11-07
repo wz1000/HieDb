@@ -203,7 +203,8 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf docs =
   let defs = genDefRow path smod docs refmap printType
   executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?,?,?,?)" defs
 
-  addTypeRefs db path hf ixs
+  when isReal $
+    addTypeRefs db path hf ixs
 
 addSrcFile :: HieDb -> FilePath -> FilePath -> Bool -> IO ()
 addSrcFile (getConn -> conn) hie srcFile isReal=
