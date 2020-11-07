@@ -36,7 +36,7 @@ import qualified Data.Map as M
 import Data.Maybe
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 1
+sCHEMA_VERSION = 2
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
