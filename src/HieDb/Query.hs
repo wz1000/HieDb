@@ -95,7 +95,7 @@ findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRo
 findDef conn occ mn uid
   = queryNamed (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
                               \FROM defs JOIN mods USING (hieFile) \
-                              \WHERE occ = :occ AND (:mod IS NULL OR mods = :mod) AND (:unit IS NULL OR unit = :unit)"
+                              \WHERE occ = :occ AND (:mod IS NULL OR mod = :mod) AND (:unit IS NULL OR unit = :unit)"
                               [":occ" := occ,":mod" := mn, ":unit" := uid]
 
 findOneDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO (Either HieDbErr (Res DefRow))
