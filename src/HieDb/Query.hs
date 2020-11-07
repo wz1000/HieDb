@@ -27,6 +27,7 @@ import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Text as T
 import           Data.IORef
 
 import Database.SQLite.Simple
@@ -48,12 +49,16 @@ resolveUnitId (getConn -> conn) mn = do
     [x] -> return $ Right $ modInfoUnit x
     (x:xs) -> return $ Left $ AmbiguousUnitId $ x :| xs
 
-search :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res RefRow]
-search (getConn -> conn) isReal occ mn uid =
-  queryNamed conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
-                  \FROM refs JOIN mods USING (hieFile) \
-                  \WHERE refs.occ = :occ AND (:mod IS NULL OR refs.mod = :mod) AND (:unit is NULL OR refs.unit = :unit) AND ( (NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
-                  [":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal]
+search :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res RefRow]
+search (getConn -> conn) isReal occ mn uid exclude =
+  queryNamed conn thisQuery ([":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal] ++ excludedFields)
+  where
+    excludedFields = zipWith (\n f -> (":exclude" <> T.pack (show n)) := f) [1 :: Int ..] exclude
+    thisQuery =
+      "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
+      \FROM refs JOIN mods USING (hieFile) \
+      \WHERE refs.occ = :occ AND (:mod IS NULL OR refs.mod = :mod) AND (:unit is NULL OR refs.unit = :unit) AND ( (NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
+      <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
 
 lookupHieFile :: HieDb -> ModuleName -> UnitId -> IO (Maybe HieModuleRow)
 lookupHieFile (getConn -> conn) mn uid = do
