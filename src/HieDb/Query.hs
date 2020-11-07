@@ -7,7 +7,8 @@ module HieDb.Query where
 
 import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, vertexSet, vertices, overlay)
 import           Algebra.Graph.AdjacencyMap.Algorithm (dfs)
-import           Algebra.Graph.Export.Dot
+import           Algebra.Graph.Export.Dot hiding ((:=))
+import qualified Algebra.Graph.Export.Dot as G
 
 import           GHC
 import           Compat.HieTypes
@@ -28,7 +29,7 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.IORef
 
-import Database.SQLite.Simple hiding ((:=))
+import Database.SQLite.Simple
 
 import           HieDb.Dump (sourceCode)
 import           HieDb.Types
@@ -41,25 +42,18 @@ getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
 resolveUnitId :: HieDb -> ModuleName -> IO (Either HieDbErr UnitId)
 resolveUnitId (getConn -> conn) mn = do
-  luid <- query conn "SELECT mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
+  luid <- query conn "SELECT mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
   case luid of
     [] -> return $ Left $ NotIndexed mn Nothing
     [x] -> return $ Right $ modInfoUnit x
     (x:xs) -> return $ Left $ AmbiguousUnitId $ x :| xs
 
-search :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res RefRow]
-search (getConn -> conn) occ (Just mn) Nothing =
-  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
-             \FROM refs JOIN mods USING (hieFile) \
-             \WHERE refs.occ = ? AND refs.mod = ? AND mods.hs_src IS NOT NULL" (occ, mn)
-search (getConn -> conn) occ (Just mn) (Just uid) =
-  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
-             \FROM refs JOIN mods USING (hieFile) \
-             \WHERE refs.occ = ? AND refs.mod = ? AND refs.unit = ? AND mods.hs_src IS NOT NULL" (occ, mn, uid)
-search (getConn -> conn) occ _ _=
-  query conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
-             \FROM refs JOIN mods USING (hieFile) \
-             \WHERE refs.occ = ? AND mods.hs_src IS NOT NULL" (Only occ)
+search :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res RefRow]
+search (getConn -> conn) isReal occ mn uid =
+  queryNamed conn "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
+                  \FROM refs JOIN mods USING (hieFile) \
+                  \WHERE refs.occ = :occ AND (:mod IS NULL OR refs.mod = :mod) AND (:unit is NULL OR refs.unit = :unit) AND ( (NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
+                  [":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal]
 
 lookupHieFile :: HieDb -> ModuleName -> UnitId -> IO (Maybe HieModuleRow)
 lookupHieFile (getConn -> conn) mn uid = do
@@ -85,30 +79,19 @@ lookupHieFileFromSource (getConn -> conn) fp = do
 
 findTypeRefs :: HieDb -> OccName -> ModuleName -> UnitId -> IO [Res TypeRef]
 findTypeRefs (getConn -> conn) occ mn uid
-  = query conn  "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
+  = query conn  "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
                 \FROM typerefs JOIN mods ON typerefs.hieFile = mods.hieFile \
                               \JOIN typenames ON typerefs.id = typenames.id \
-                \WHERE typenames.name = ? AND typenames.mod = ? AND typenames.unit = ? \
+                \WHERE typenames.name = ? AND typenames.mod = ? AND typenames.unit = ? AND mods.is_real \
                        \ORDER BY typerefs.depth ASC"
                 (occ,mn,uid)
 
 findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
-findDef conn occ Nothing Nothing
-  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
-                         \FROM defs JOIN mods USING (hieFile) \
-                         \WHERE occ = ?" (Only occ)
-findDef conn occ (Just mn) Nothing
-  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
-                         \FROM defs JOIN mods USING (hieFile) \
-                         \WHERE occ = ? AND mod = ?" (occ,mn)
-findDef conn occ Nothing (Just uid)
-  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
-                         \FROM defs JOIN mods USING (hieFile) \
-                         \WHERE occ = ? AND unit = ?" (occ,uid)
-findDef conn occ (Just mn) (Just uid)
-  = query (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
-                         \FROM defs JOIN mods USING (hieFile) \
-                         \WHERE occ = ? AND mod = ? AND unit = ?" (occ,mn,uid)
+findDef conn occ mn uid
+  = queryNamed (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
+                              \FROM defs JOIN mods USING (hieFile) \
+                              \WHERE occ = :occ AND (:mod IS NULL OR mods = :mod) AND (:unit IS NULL OR unit = :unit)"
+                              [":occ" := occ,":mod" := mn, ":unit" := uid]
 
 findOneDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO (Either HieDbErr (Res DefRow))
 findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
@@ -120,7 +103,7 @@ findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
 
 searchDef :: HieDb -> String -> IO [Res DefRow]
 searchDef conn cs
-  = query (getConn conn) "SELECT defs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.time \
+  = query (getConn conn) "SELECT defs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ LIKE ? \
                          \LIMIT 200" (Only $ '_':cs++"%")
@@ -161,8 +144,8 @@ declRefs db = do
     ( export
         ( ( defaultStyle ( \( _, hie, occ, _, _, _, _ ) -> hie <> ":" <> occ ) )
           { vertexAttributes = \( mod', _, v : occ, _, _, _, _ ) ->
-              [ "label" := ( mod' <> "." <> occ )
-              , "fillcolor" := case v of 'v' -> "red"; 't' -> "blue" ; _ -> "black" ]
+              [ "label" G.:= ( mod' <> "." <> occ )
+              , "fillcolor" G.:= case v of 'v' -> "red"; 't' -> "blue" ; _ -> "black" ]
           }
         )
         graph

@@ -33,9 +33,6 @@ import HieDb.Types
 import HieDb.Utils
 import qualified Data.Array as A
 import qualified Data.Map as M
-import FastString as FS
-import qualified Data.Text.IO as T
-import System.IO
 import Data.Maybe
 
 sCHEMA_VERSION :: Integer
@@ -76,6 +73,7 @@ initConn (getConn -> conn) = do
                 \, unit    TEXT NOT NULL \
                 \, is_boot BOOL NOT NULL \
                 \, hs_src  TEXT UNIQUE ON CONFLICT REPLACE \
+                \, is_real BOOL NOT NULL \
                 \, time    TEXT NOT NULL \
                 \, CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE \
                 \)"
@@ -176,10 +174,10 @@ addRefsFrom c@(getConn -> conn) path = do
   let isBoot = "boot" `isSuffixOf` path
   case mods of
     (HieModuleRow{}:_) -> return ()
-    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path isBoot Nothing time hf emptyDeclDocMap
+    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path isBoot Nothing False time hf emptyDeclDocMap
 
-addRefsFromLoaded :: (MonadIO m) => HieDb -> FilePath -> Bool -> Maybe FilePath -> UTCTime -> HieFile -> DeclDocMap -> m ()
-addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile time hf docs = liftIO $ withTransaction conn $ do
+addRefsFromLoaded :: (MonadIO m) => HieDb -> FilePath -> Bool -> Maybe FilePath -> Bool -> UTCTime -> HieFile -> DeclDocMap -> m ()
+addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf docs = liftIO $ withTransaction conn $ do
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
@@ -189,9 +187,9 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile time hf docs = liftIO
       uid    = moduleUnitId smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
-      modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile time)
+      modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile isReal time)
 
-  execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?)" modrow
+  execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
   let (rows,decls) = genRefsAndDecls path smod refmap
   executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?,?)" rows
@@ -207,9 +205,9 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile time hf docs = liftIO
 
   addTypeRefs db path hf ixs
 
-addSrcFile :: HieDb -> FilePath -> FilePath -> IO ()
-addSrcFile (getConn -> conn) hie srcFile =
-  execute conn "UPDATE mods SET hs_src = ? WHERE hieFile = ?" (srcFile, hie)
+addSrcFile :: HieDb -> FilePath -> FilePath -> Bool -> IO ()
+addSrcFile (getConn -> conn) hie srcFile isReal=
+  execute conn "UPDATE mods SET hs_src = ? , is_real = ? WHERE hieFile = ?" (srcFile, isReal, hie)
 
 deleteFileFromIndex :: HieDb -> FilePath -> IO ()
 deleteFileFromIndex (getConn -> conn) path = liftIO $ withTransaction conn $ do

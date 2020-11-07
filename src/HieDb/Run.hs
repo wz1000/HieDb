@@ -219,12 +219,12 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
         putStrLn "\nCompleted!"
     go conn (TypeRefs typ mn muid) = do
       let occ = mkOccName tcClsName typ
-      refs <- search conn occ mn muid
+      refs <- search conn False occ mn muid
       reportRefs refs
     go conn (NameRefs nm mn muid) = do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
-      refs <- search conn occ mn muid
+      refs <- search conn False occ mn muid
       reportRefs refs
     go conn (NameDef nm mn muid) = do
       let ns = if isCons nm then dataName else varName
@@ -288,7 +288,7 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
         putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is used in:"]
         case nameModule_maybe name of
           Just mod -> do
-            reportRefs =<< search conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
+            reportRefs =<< search conn False (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
           Nothing -> do
             let refmap = generateReferencesMap (getAsts $ hie_asts hf)
                 refs = map (toRef . fst) $ fromMaybe [] $ M.lookup (Right name) refmap

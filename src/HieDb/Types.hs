@@ -7,6 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module HieDb.Types where
 
 import Prelude hiding (mod)
@@ -53,6 +54,7 @@ data ModuleInfo
   , modInfoUnit :: UnitId
   , modInfoIsBoot :: Bool
   , modInfoSrcFile :: Maybe FilePath
+  , modInfoIsReal :: Bool -- Does this represent an actual file or a cached dep?
   , modInfoTime :: UTCTime
   }
 
@@ -60,9 +62,10 @@ instance Show ModuleInfo where
   show = show . toRow
 
 instance ToRow ModuleInfo where
-  toRow (ModuleInfo a b c d e) = toRow (a,b,c,d,e)
+  toRow (ModuleInfo a b c d e f) = toRow (a,b,c,d,e,f)
 instance FromRow ModuleInfo where
-  fromRow = ModuleInfo <$> field <*> field <*> field <*> field <*> field
+  fromRow = ModuleInfo <$> field <*> field <*> field
+                       <*> field <*> field <*> field
 
 type Res a = a :. ModuleInfo
 
