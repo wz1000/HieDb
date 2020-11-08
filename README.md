@@ -24,29 +24,29 @@ Compile any package with ghc options `-fwrite-ide-info` and optionally,
 ### Indexing
 
 ```
-$ cabal new-run exe:hiedb -- -D <db-loc> index <hiedir>
+$ hiedb -D <db-loc> index <hiedir>
 ```
 
 You can omit `<db-loc>`, in which case it will default to the environment variable
-`HIEDB`, or if that is not defined, `~/.hiedb`
+`HIEDB`, or if that is not defined, `$XDG_DATA_DIR/default_$DBVERSION.hiedb`
 
 ### Querying
 
 - Looking up references for a name(value/data constructor):
   ```
-  $ cabal new-run exe:hiedb -- -D <db-loc> name-refs <NAME> [MODULE]
+  $ hiedb -D <db-loc> name-refs <NAME> [MODULE]
   ```
 - Looking up references for a type:
   ```
-  $ cabal new-run exe:hiedb -- -D <db-loc> type-refs <NAME> [MODULE]
+  $ hiedb -D <db-loc> type-refs <NAME> [MODULE]
   ```
 
 `MODULE` is the module the name was originaly defined in.
 
 - Looking up references for a symbol at a particular location:
   ```
-  $ cabal new-run exec:hiedb -- -D -<db-loc> point-refs (-f|--hiefile HIEFILE) SLINE SCOL [ELINE] [ECOL]  
-  $ cabal new-run exec:hiedb -- -D -<db-loc> point-refs MODULE [-u|--unit-id UNITID] SLINE SCOL [ELINE] [ECOL]
+  $ hiedb -D -<db-loc> point-refs (-f|--hiefile HIEFILE) SLINE SCOL [ELINE] [ECOL]  
+  $ hiedb -D -<db-loc> point-refs MODULE [-u|--unit-id UNITID] SLINE SCOL [ELINE] [ECOL]
   ```
 
 You can either lookup references for a Module that is already indexed,

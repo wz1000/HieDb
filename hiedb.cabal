@@ -2,15 +2,20 @@ cabal-version:       2.4
 name:                hiedb
 version:             0.1.0.0
 synopsis:            Generates a references DB from .hie files
--- description:
--- bug-reports:
+description:         Tool and library to index and query a collection of `.hie` files
+bug-reports:         https://github.com/wz1000/HieDb/issues
 license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Zubin Duggal
-maintainer:          zubin@cmi.ac.in
--- copyright:
+maintainer:          zubin.duggal@gmail.com
+copyright:           Zubin Duggal
 category:            Development
 extra-source-files:  CHANGELOG.md
+
+
+source-repository head
+  type: git
+  location: https://github.com/wz1000/HieDb
 
 executable hiedb
   hs-source-dirs:      exe
@@ -20,15 +25,20 @@ executable hiedb
   build-depends:       base
                      , hiedb
                      , ghc-paths
-  ghc-options: -Wall
+  ghc-options:         -Wall
   default-language:    Haskell2010
 
 library
   hs-source-dirs:      src
-  exposed-modules:     HieDb, HieDb.Utils, HieDb.Create, HieDb.Query, HieDb.Types, HieDb.Dump, HieDb.Html, HieDb.Run
-  -- other-modules:
-  -- other-extensions:
-  build-depends:       base
+  exposed-modules:     HieDb,
+                       HieDb.Utils,
+                       HieDb.Create,
+                       HieDb.Query,
+                       HieDb.Types,
+                       HieDb.Dump,
+                       HieDb.Html,
+                       HieDb.Run
+  build-depends:       base >= 4.12 && < 4.15
                      , ghc >= 8.6
                      , array
                      , containers
@@ -40,12 +50,10 @@ library
                      , time
                      , text
                      , bytestring
-                     , semigroups
                      , algebraic-graphs
-                     , tree-traversals
                      , lucid
                      , optparse-applicative
                      , terminal-size
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options: -Wall
+  ghc-options:         -Wall

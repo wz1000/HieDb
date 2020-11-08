@@ -1,5 +1,5 @@
 # Revision history for hiedb
 
-## 0.1.0.0 -- YYYY-mm-dd
+## 0.1.0.0 -- 2020-11-08
 
-* First version. Released on an unsuspecting world.
+* First version.
