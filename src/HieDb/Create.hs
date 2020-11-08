@@ -33,7 +33,7 @@ import qualified Data.Map as M
 import Data.Maybe
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 2
+sCHEMA_VERSION = 3
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
@@ -108,8 +108,6 @@ initConn (getConn -> conn) = do
                 \, sc      INTEGER NOT NULL \
                 \, el      INTEGER NOT NULL \
                 \, ec      INTEGER NOT NULL \
-                \, type    TEXT             \
-                \, docs    TEXT             \
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \, PRIMARY KEY(hieFile,occ) \
                 \)"
@@ -171,10 +169,10 @@ addRefsFrom c@(getConn -> conn) path = do
   let isBoot = "boot" `isSuffixOf` path
   case mods of
     (HieModuleRow{}:_) -> return ()
-    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path isBoot Nothing False time hf emptyDeclDocMap
+    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path isBoot Nothing False time hf
 
-addRefsFromLoaded :: (MonadIO m) => HieDb -> FilePath -> Bool -> Maybe FilePath -> Bool -> UTCTime -> HieFile -> DeclDocMap -> m ()
-addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf docs = liftIO $ withTransaction conn $ do
+addRefsFromLoaded :: (MonadIO m) => HieDb -> FilePath -> Bool -> Maybe FilePath -> Bool -> UTCTime -> HieFile -> m ()
+addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf = liftIO $ withTransaction conn $ do
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
@@ -194,11 +192,8 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf docs =
 
   ixs <- addArr db (hie_types hf)
 
-  let printType = case getDbDynFlags db of
-        Just df -> renderHieType df . flip recoverFullType (hie_types hf)
-        Nothing -> const ""
-  let defs = genDefRow path smod docs refmap printType
-  executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?,?,?,?)" defs
+  let defs = genDefRow path smod refmap
+  executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?,?)" defs
 
   when isReal $
     addTypeRefs db path hf ixs

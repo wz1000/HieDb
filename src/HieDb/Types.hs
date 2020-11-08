@@ -192,17 +192,14 @@ data DefRow
   , defSCol :: Int
   , defELine :: Int
   , defECol :: Int
-  , defType :: Maybe String
-  , defDoc :: Maybe String
   }
 
 instance ToRow DefRow where
-  toRow (DefRow a b c d e f g h i) = toRow ((a,b,c,d):.(e,f,g,h,i))
+  toRow (DefRow a b c d e f g) = toRow ((a,b,c,d):.(e,f,g))
 
 instance FromRow DefRow where
   fromRow = DefRow <$> field <*> field <*> field <*> field
-                   <*> field <*> field <*> field <*> field
-                   <*> field
+                   <*> field <*> field <*> field
 
 
 {-| Monad with access to 'NameCacheUpdater', which is needed to deserialize .hie files -}

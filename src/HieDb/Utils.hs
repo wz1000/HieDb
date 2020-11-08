@@ -25,12 +25,6 @@ import SrcLoc
 import DynFlags
 import SysTools
 
-#if __GLASGOW_HASKELL__ >= 810
-import GHC.Hs.Doc
-#else
-import HsDoc
-#endif
-
 import qualified Data.Map as M
 
 import qualified FastString as FS
@@ -212,8 +206,8 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
     goDecl (RecField _ sp) = sp
     goDecl _ = Nothing
 
-genDefRow :: FilePath -> Module -> DeclDocMap -> M.Map Identifier [(Span, IdentifierDetails a)] -> (a -> String) -> [DefRow]
-genDefRow path smod (DeclDocMap docmap) refmap printType = genRows $ M.toList refmap
+genDefRow :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> [DefRow]
+genDefRow path smod refmap = genRows $ M.toList refmap
   where
     genRows = mapMaybe go
     getSpan name dets
@@ -238,8 +232,7 @@ genDefRow path smod (DeclDocMap docmap) refmap printType = genRows $ M.toList re
       , sc   <- srcSpanStartCol sp
       , el   <- srcSpanEndLine sp
       , ec   <- srcSpanEndCol sp
-      , let typ = getFirst $ foldMap (First . identType . snd) dets
-      = Just $ DefRow path occ file sl sc el ec (printType <$> typ) (unpackHDS <$> M.lookup name docmap)
+      = Just $ DefRow path occ file sl sc el ec
     go _ = Nothing
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )
