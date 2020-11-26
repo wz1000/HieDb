@@ -2,10 +2,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE CPP #-}
@@ -78,7 +76,7 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 #else
         HAppTy x y -> mapM_ next [x,y]
 #endif
-        HTyConApp _ (HieArgs xs) -> mapM_ next (map snd xs)
+        HTyConApp _ (HieArgs xs) -> mapM_ (next . snd) xs
         HForAllTy ((_ , a),_) b -> mapM_ next [a,b]
         HFunTy a b -> mapM_ next [a,b]
         HQualTy a b -> mapM_ next [a,b]
@@ -232,7 +230,7 @@ genDefRow path smod (DeclDocMap docmap) refmap printType = genRows $ M.toList re
     isDef Decl{}                    = True
     isDef _                         = False
 
-    go ((Right name),dets)
+    go (Right name,dets)
       | Just mod <- nameModule_maybe name
       , mod == smod
       , occ  <- nameOccName name

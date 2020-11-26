@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BlockArguments #-}
 module HieDb.Run where
@@ -116,19 +115,19 @@ cmdParser
    = hsubparser
    $ command "init" (info (pure Init) $ progDesc "Initialize databse")
   <> command "index" (info (Index <$> many (strArgument (metavar "DIRECTORY..."))) $ progDesc "Index database")
-  <> command "name-refs" (info (NameRefs <$> (strArgument (metavar "NAME"))
+  <> command "name-refs" (info (NameRefs <$> strArgument (metavar "NAME")
                                          <*> optional (mkModuleName <$> strArgument (metavar "MODULE"))
                                          <*> maybeUnitId)
                          $ progDesc "Lookup references of value MODULE.NAME")
-  <> command "type-refs" (info (TypeRefs <$> (strArgument (metavar "NAME"))
+  <> command "type-refs" (info (TypeRefs <$> strArgument (metavar "NAME")
                                          <*> optional moduleNameParser
                                          <*> maybeUnitId)
                          $ progDesc "Lookup references of type MODULE.NAME")
-  <> command "name-def" (info (NameDef <$> (strArgument (metavar "NAME"))
+  <> command "name-def" (info (NameDef <$> strArgument (metavar "NAME")
                                        <*> optional moduleNameParser
                                        <*> maybeUnitId)
                          $ progDesc "Lookup definition of value MODULE.NAME")
-  <> command "type-def" (info (TypeDef <$> (strArgument (metavar "NAME"))
+  <> command "type-def" (info (TypeDef <$> strArgument (metavar "NAME")
                                        <*> optional moduleNameParser
                                        <*> maybeUnitId)
                          $ progDesc "Lookup definition of type MODULE.NAME")
@@ -144,22 +143,22 @@ cmdParser
                          $ progDesc "Lookup the location of the .hie file corresponding to MODULE")
   <> command "point-refs"
         (info (RefsAtPoint <$> hieTarget
-                           <*> (posParser 'S')
+                           <*> posParser 'S'
                            <*> optional (posParser 'E'))
               $ progDesc "Find references for symbol at point/span")
   <> command "point-types"
         (info (TypesAtPoint <$> hieTarget
-                            <*> (posParser 'S')
+                            <*> posParser 'S'
                             <*> optional (posParser 'E'))
               $ progDesc "List types of ast at point/span")
   <> command "point-defs"
         (info (DefsAtPoint <$> hieTarget
-                            <*> (posParser 'S')
+                            <*> posParser 'S'
                             <*> optional (posParser 'E'))
               $ progDesc "Find definition for symbol at point/span")
   <> command "point-info"
         (info (InfoAtPoint <$> hieTarget
-                            <*> (posParser 'S')
+                            <*> posParser 'S'
                             <*> optional (posParser 'E'))
               $ progDesc "Print name, module name, unit id for symbol at point/span")
   <> command "ref-graph" (info (pure RefGraph) $ progDesc "Generate a reachability graph")
@@ -173,7 +172,7 @@ cmdParser
 type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
 posParser :: Char -> Parser (Int,Int)
-posParser c = ((,) <$> argument auto (metavar $ c:"LINE") <*> argument auto (metavar $ c:"COL"))
+posParser c = (,) <$> argument auto (metavar $ c:"LINE") <*> argument auto (metavar $ c:"COL")
 
 maybeUnitId :: Parser (Maybe UnitId)
 maybeUnitId =
@@ -194,7 +193,7 @@ progress :: Int -> Int -> Int -> (FilePath -> DbMonad a) -> FilePath -> DbMonad 
 progress l total cur act f = do
   liftIO $ putStr $ replicate l ' '
   liftIO $ putStr "\r"
-  let msg = (take (l-8) $ unwords ["Processing file", show (cur + 1) ++ "/" ++ show total ++ ":", f]) ++ "..."
+  let msg = take (l-8) $ unwords ["Processing file", show (cur + 1) ++ "/" ++ show total ++ ":", f] ++ "..."
   liftIO $ putStr msg
   x <- act f
   liftIO $ putStr " done\r"
@@ -213,8 +212,8 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
       nc <- newIORef =<< makeNc
       wsize <- maybe 80 width <$> size
       let progress' = if quiet opts then (\_ _ _ k -> k) else progress
-      runDbM nc $ sequence_ $
-        zipWith (\f n -> progress' wsize (length files) n (addRefsFrom conn) f) files [0..]
+      runDbM nc $
+        zipWithM_ (\f n -> progress' wsize (length files) n (addRefsFrom conn) f) files [0..]
       unless (quiet opts) $
         putStrLn "\nCompleted!"
     go conn (TypeRefs typ mn muid) = do
@@ -270,9 +269,9 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
     go conn (ModuleUIDs mn) = do
       euid <- resolveUnitId conn mn
       case euid of
-        Right x -> putStrLn $ show x
-        Left (AmbiguousUnitId xs) -> mapM_ (putStrLn . show) xs
-        err -> reportAmbiguousErr err >> return ()
+        Right x -> print x
+        Left (AmbiguousUnitId xs) -> mapM_ print xs
+        err -> void $ reportAmbiguousErr err
     go conn (LookupHieFile mn muid) = reportAmbiguousErr =<< do
       euid <- maybe (resolveUnitId conn mn) (return . Right) muid
       case euid of
@@ -291,7 +290,7 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
             reportRefs =<< search conn False (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod) []
           Nothing -> do
             let refmap = generateReferencesMap (getAsts $ hie_asts hf)
-                refs = map (toRef . fst) $ fromMaybe [] $ M.lookup (Right name) refmap
+                refs = map (toRef . fst) $ M.findWithDefault [] (Right name) refmap
                 toRef spn = (hie_module hf,
                               (srcSpanStartLine spn , srcSpanStartCol spn),
                               (srcSpanEndLine spn , srcSpanEndCol spn))
@@ -336,8 +335,8 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do
-  putStrLn $ "Span: " ++ (showSDoc dynFlags $ ppr sp)
-  putStrLn $ "Constructors: " ++ (showSDoc dynFlags $ ppr $ nodeAnnotations x)
+  putStrLn $ "Span: " ++ showSDoc dynFlags (ppr sp)
+  putStrLn $ "Constructors: " ++ showSDoc dynFlags (ppr $ nodeAnnotations x)
   putStrLn "Identifiers:"
   let idents = M.toList $ nodeIdentifiers x
   forM_ idents $ \(ident,inf) -> do
@@ -348,7 +347,7 @@ printInfo dynFlags x sp = do
           Nothing -> pure ()
           Just m -> do
             putStr "Symbol:"
-            putStrLn (show $ Symbol (nameOccName nm) m)
+            print $ Symbol (nameOccName nm) m
         putStrLn $ showSDoc dynFlags $
           hang (ppr nm <+> text "defined at" <+> ppr (nameSrcSpan nm)) 4 (ppr inf)
   putStrLn "Types:"
@@ -363,32 +362,30 @@ hieFileCommand conn target f = join $ reportAmbiguousErr =<< withTarget conn tar
 reportAmbiguousErr :: Either HieDbErr a -> IO a
 reportAmbiguousErr (Right x) = return x
 reportAmbiguousErr (Left (NotIndexed mn muid)) = do
-  putStrLn $ unwords $ ["Module",moduleNameString mn ++ maybe "" (\uid -> "("++show uid++")") muid, "not indexed."]
+  putStrLn $ unwords ["Module",moduleNameString mn ++ maybe "" (\uid -> "("++show uid++")") muid, "not indexed."]
   exitFailure
 reportAmbiguousErr (Left (AmbiguousUnitId xs)) = do
-  putStrLn $ unwords $ ["UnitId could be any of:",intercalate "," (map show $ toList xs)]
+  putStrLn $ unwords ["UnitId could be any of:",intercalate "," (map show $ toList xs)]
   exitFailure
 reportAmbiguousErr (Left (NameNotFound occ mn muid)) = do
-  putStrLn $ unwords $
+  putStrLn $ unwords
     ["Couldn't find name:",occNameString occ
     ,maybe "" (("from module " ++) . moduleNameString) mn ++ maybe "" (\uid ->"("++show uid++")") muid]
   exitFailure
 reportAmbiguousErr (Left (NameUnhelpfulSpan nm msg)) = do
-  putStrLn $ unwords $
+  putStrLn $ unwords
     ["Got no helpful spans for:", occNameString (nameOccName nm), "\nMsg:", msg]
   exitFailure
 
 reportRefSpans :: [(Module,(Int,Int),(Int,Int))] -> IO ()
-reportRefSpans xs = forM_ xs $ \(mn,(sl,sc),(el,ec)) -> do
-  putStr (moduleNameString $ moduleName mn)
-  putStr ":"
-  putStr (show sl)
-  putStr ":"
-  putStr (show sc)
-  putStr "-"
-  putStr (show el)
-  putStr ":"
-  putStrLn (show ec)
+reportRefSpans = traverse_ $ \(mn,(sl,sc),(el,ec)) ->
+  putStrLn $ concat
+    [ moduleNameString $ moduleName mn
+    , ':':show sl
+    , ':':show sc
+    , '-':show el
+    , ':':show ec
+    ]
 
 reportRefs :: [Res RefRow] -> IO ()
 reportRefs xs = reportRefSpans
