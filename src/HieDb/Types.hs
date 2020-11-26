@@ -1,11 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module HieDb.Types where
@@ -45,8 +43,8 @@ data HieDbException
 
 instance Exception HieDbException where
 
-setHieTrace :: HieDb -> (Maybe (T.Text -> IO ())) -> IO ()
-setHieTrace (getConn -> conn) x = setTrace conn x
+setHieTrace :: HieDb -> Maybe (T.Text -> IO ()) -> IO ()
+setHieTrace (getConn -> conn) = setTrace conn
 
 data ModuleInfo
   = ModuleInfo
@@ -251,9 +249,7 @@ instance Read Symbol where
 readNameSpace :: R.ReadP NameSpace
 readNameSpace = do
   c <- R.get
-  case fromNsChar c of
-    Nothing -> R.pfail
-    Just ns -> return ns
+  maybe R.pfail return (fromNsChar c)
 
 readColon :: R.ReadP ()
 readColon = do
