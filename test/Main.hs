@@ -11,7 +11,7 @@ main = hspec spec
 
 spec :: Spec
 spec = do
-  describe "hiedb" $ do
+  describe "hiedb (command line)" $ do
     beforeAll_ compileTestModules $ afterAll_ cleanTestData $ do
       describe "index" $
         it "indexes testing project .hie files" $ do
