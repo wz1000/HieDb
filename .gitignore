@@ -2,3 +2,4 @@
 dist-newstyle/
 cabal.project.local*
 *.buildinfo
+.hie

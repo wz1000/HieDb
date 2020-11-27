@@ -1,0 +1,1 @@
+This folder contains couple of modules used for integration tests.
