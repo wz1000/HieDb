@@ -252,9 +252,7 @@ readNameSpace = do
   maybe R.pfail return (fromNsChar c)
 
 readColon :: R.ReadP ()
-readColon = do
-  c <- R.get
-  when (c /= ':') R.pfail
+readColon = () <$ R.char ':'
 
 readSymbol :: R.ReadP Symbol
 readSymbol = do
