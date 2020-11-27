@@ -63,22 +63,10 @@ test-suite hiedb-tests
     hs-source-dirs:     test
     main-is:            Main.hs
     build-tool-depends: hiedb:hiedb
-    other-modules:      Paths_hiedb
-    autogen-modules:    Paths_hiedb
     build-depends:      base >= 4.12 && < 4.15
                       , directory
+                      , filepath
                       , hspec
                       , process
                       , temporary
-                      , test-lib
     default-language:   Haskell2010
-
--- Private library used in tests
-library test-lib
-    hs-source-dirs:     test-lib
-    exposed-modules:    One.Two.Some
-                        Foo
-    build-depends:      base >= 4.12 && < 4.15
-    default-language:   Haskell2010
-    ghc-options:        -fwrite-ide-info -hiedir=.hie
-                    

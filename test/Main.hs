@@ -1,11 +1,10 @@
 module Main where
 
-import Control.Monad (when)
-import Data.List (isSuffixOf)
-import System.Directory (doesFileExist, findExecutable, removeFile)
+import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
 import System.Exit (ExitCode (ExitSuccess), die)
-import System.Process (proc, readCreateProcessWithExitCode)
-import Test.Hspec (Expectation, Spec, afterAll_, describe, hspec, it, shouldBe, shouldSatisfy)
+import System.FilePath ((</>))
+import System.Process (callProcess, proc, readCreateProcessWithExitCode)
+import Test.Hspec (Expectation, Spec, afterAll_, beforeAll_, describe, hspec, it, shouldBe)
 
 main :: IO ()
 main = hspec spec
@@ -13,21 +12,20 @@ main = hspec spec
 spec :: Spec
 spec = do
   describe "hiedb" $ do
-    afterAll_ removeTestDb $ do
+    beforeAll_ compileTestModules $ afterAll_ cleanTestData $ do
       describe "index" $
         it "indexes testing project .hie files" $ do
-          runHieDbCli ["index" , ".hie", "--quiet"]
+          runHieDbCli ["index", testTmp, "--quiet"]
             `suceedsWithStdin` ""
 
       describe "ls" $
         it "lists the indexed modules" $ do
+          cwd <- getCurrentDirectory
           runHieDbCli ["ls"]
-            `succeedsWithStdinSatisfying` (\stdin -> do
-              let inlines = lines stdin
-              length inlines `shouldBe` 2
-              (inlines !! 0) `shouldSatisfy` isSuffixOf ".hie/Foo.hie\tFoo\thiedb-0.1.0.0-inplace-test-lib"
-              (inlines !! 1) `shouldSatisfy` isSuffixOf ".hie/One/Two/Some.hie\tOne.Two.Some\thiedb-0.1.0.0-inplace-test-lib"
-              )
+            `suceedsWithStdin` unlines (fmap (\x -> cwd </> testTmp </> x)
+                [ "Foo.hie\tFoo\tmain"
+                , "One/Two/Some.hie\tOne.Two.Some\tmain"
+                ])
 
       describe "name-refs" $
         it "lists all references of given function" $ do
@@ -65,11 +63,27 @@ findHieDbExecutable =
   maybe (die "Did not find hiedb executable") pure =<< findExecutable "hiedb"
 
 
+cleanTestData :: IO ()
+cleanTestData = removeDirectoryRecursive testTmp
+
+compileTestModules :: IO ()
+compileTestModules =
+  callProcess "ghc" $
+    "-fwrite-ide-info" :
+    "-hiedir=" <> testTmp :
+    "-hidir=" <> testTmp :
+    "-odir=" <> testTmp :
+    testModules
+
+
+testModules :: [FilePath]
+testModules = fmap ("test/data"</>)
+  [ "Foo.hs"
+  , "One/Two/Some.hs"
+  ]
+
 testDb :: FilePath
-testDb = "test.hiedb"
+testDb = testTmp </> "test.hiedb"
 
-
-removeTestDb :: IO ()
-removeTestDb = do
-  ex <- doesFileExist testDb
-  when ex $ removeFile testDb
+testTmp :: FilePath
+testTmp = "test/tmp"
