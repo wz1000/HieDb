@@ -106,14 +106,14 @@ optParser defdb
     = Options
   <$> strOption (long "database" <> short 'D' <> metavar "DATABASE"
               <> value defdb <> showDefault <> help "References Database")
-  <*> switch (long "trace" <> short 'v')
-  <*> switch (long "quiet" <> short 'q')
-  <*> switch (long "virtual-file" <> short 'f')
+  <*> switch (long "trace" <> short 'v' <> help "Print SQL queries being executed")
+  <*> switch (long "quiet" <> short 'q' <> help "Don't print progress messages")
+  <*> switch (long "virtual-file" <> short 'f' <> internal)
 
 cmdParser :: Parser Command
 cmdParser
    = hsubparser
-   $ command "init" (info (pure Init) $ progDesc "Initialize databse")
+   $ command "init" (info (pure Init) $ progDesc "Initialize database")
   <> command "index" (info (Index <$> many (strArgument (metavar "DIRECTORY..."))) $ progDesc "Index database")
   <> command "name-refs" (info (NameRefs <$> strArgument (metavar "NAME")
                                          <*> optional (mkModuleName <$> strArgument (metavar "MODULE"))
