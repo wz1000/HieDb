@@ -3,6 +3,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE QuasiQuotes #-}
 module HieDb.Query where
 
 import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, vertexSet, vertices, overlay)
@@ -31,6 +32,7 @@ import qualified Data.Text as T
 import           Data.IORef
 
 import Database.SQLite.Simple
+import Database.SQLite.Simple.QQ (sql)
 
 import           HieDb.Dump (sourceCode)
 import           HieDb.Types
@@ -43,11 +45,16 @@ getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
 resolveUnitId :: HieDb -> ModuleName -> IO (Either HieDbErr UnitId)
 resolveUnitId (getConn -> conn) mn = do
-  luid <- query conn "SELECT mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
-  case luid of
-    [] -> return $ Left $ NotIndexed mn Nothing
-    [x] -> return $ Right $ modInfoUnit x
-    (x:xs) -> return $ Left $ AmbiguousUnitId $ x :| xs
+  luid <- query conn [sql|
+      SELECT mods.mod, mods.unit, mods.is_boot, mods.hs_src, mods.is_real, mods.time
+      FROM mods
+      WHERE mod = ?
+        AND is_boot = 0
+  |] (Only mn)
+  return $ case luid of
+    []     -> Left $ NotIndexed mn Nothing
+    [x]    -> Right $ modInfoUnit x
+    (x:xs) -> Left $ AmbiguousUnitId $ x :| xs
 
 search :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res RefRow]
 search (getConn -> conn) isReal occ mn uid exclude =
@@ -83,20 +90,25 @@ lookupHieFileFromSource (getConn -> conn) fp = do
             ++ intercalate ", " (map (show . toRow) xs)
 
 findTypeRefs :: HieDb -> OccName -> ModuleName -> UnitId -> IO [Res TypeRef]
-findTypeRefs (getConn -> conn) occ mn uid
-  = query conn  "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
-                \FROM typerefs JOIN mods ON typerefs.hieFile = mods.hieFile \
-                              \JOIN typenames ON typerefs.id = typenames.id \
-                \WHERE typenames.name = ? AND typenames.mod = ? AND typenames.unit = ? AND mods.is_real \
-                       \ORDER BY typerefs.depth ASC"
-                (occ,mn,uid)
+findTypeRefs (getConn -> conn) occ mn uid = query conn [sql|
+    SELECT typerefs.*, mods.mod, mods.unit, mods.is_boot, mods.hs_src, mods.is_real, mods.time
+    FROM typerefs JOIN mods ON typerefs.hieFile = mods.hieFile
+                  JOIN typenames ON typerefs.id = typenames.id
+    WHERE typenames.name = ?
+      AND typenames.mod = ?
+      AND typenames.unit = ?
+      AND mods.is_real
+    ORDER BY typerefs.depth ASC
+  |] (occ, mn, uid)
 
 findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
-findDef conn occ mn uid
-  = queryNamed (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
-                              \FROM defs JOIN mods USING (hieFile) \
-                              \WHERE occ = :occ AND (:mod IS NULL OR mod = :mod) AND (:unit IS NULL OR unit = :unit)"
-                              [":occ" := occ,":mod" := mn, ":unit" := uid]
+findDef conn occ mn uid = queryNamed (getConn conn) [sql|
+    SELECT defs.*, mods.mod, mods.unit, mods.is_boot, mods.hs_src, mods.is_real, mods.time
+    FROM defs JOIN mods USING (hieFile)
+    WHERE occ = :occ
+      AND (:mod IS NULL OR mod = :mod)
+      AND (:unit IS NULL OR unit = :unit)
+  |] [":occ" := occ, ":mod" := mn, ":unit" := uid]
 
 findOneDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO (Either HieDbErr (Res DefRow))
 findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
@@ -107,11 +119,12 @@ findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
     defUnit (_:.i) = i
 
 searchDef :: HieDb -> String -> IO [Res DefRow]
-searchDef conn cs
-  = query (getConn conn) "SELECT defs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
-                         \FROM defs JOIN mods USING (hieFile) \
-                         \WHERE occ LIKE ? \
-                         \LIMIT 200" (Only $ '_':cs++"%")
+searchDef conn cs = query (getConn conn) [sql|
+    SELECT defs.*, mods.mod, mods.unit, mods.is_boot, mods.hs_src, mods.is_real, mods.time
+    FROM defs JOIN mods USING (hieFile)
+    WHERE occ LIKE ?
+    LIMIT 200
+  |] (Only $ '_':cs++"%")
 
 withTarget
   :: HieDb
@@ -158,18 +171,20 @@ declRefs db = do
 
 getGraph :: HieDb -> IO (AdjacencyMap Vertex)
 getGraph (getConn -> conn) = do
-  es <-
-    query_ conn "SELECT  mods.mod,    decls.hieFile,    decls.occ,    decls.sl,    decls.sc,    decls.el,    decls.ec, \
-                       \rmods.mod, ref_decl.hieFile, ref_decl.occ, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec \
-                \FROM decls JOIN refs              ON refs.hieFile  = decls.hieFile \
-                           \JOIN mods              ON mods.hieFile  = decls.hieFile \
-                           \JOIN mods  AS rmods    ON rmods.mod = refs.mod AND rmods.unit = refs.unit AND rmods.is_boot = 0 \
-                           \JOIN decls AS ref_decl ON ref_decl.hieFile = rmods.hieFile AND ref_decl.occ = refs.occ \
-                \WHERE ((refs.sl > decls.sl) OR (refs.sl = decls.sl AND refs.sc >  decls.sc)) \
-                  \AND ((refs.el < decls.el) OR (refs.el = decls.el AND refs.ec <= decls.ec))"
-  vs <-
-    query_ conn "SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec \
-                   \FROM decls JOIN mods USING (hieFile)"
+  es <- query_ conn [sql|
+    SELECT mods.mod,    decls.hieFile,    decls.occ,    decls.sl,    decls.sc,    decls.el,    decls.ec,
+          rmods.mod, ref_decl.hieFile, ref_decl.occ, ref_decl.sl, ref_decl.sc, ref_decl.el, ref_decl.ec
+    FROM decls JOIN refs              ON refs.hieFile  = decls.hieFile
+               JOIN mods              ON mods.hieFile  = decls.hieFile
+               JOIN mods  AS rmods    ON rmods.mod = refs.mod AND rmods.unit = refs.unit AND rmods.is_boot = 0
+               JOIN decls AS ref_decl ON ref_decl.hieFile = rmods.hieFile AND ref_decl.occ = refs.occ
+    WHERE ((refs.sl > decls.sl) OR (refs.sl = decls.sl AND refs.sc > decls.sc))
+      AND ((refs.el < decls.el) OR (refs.el = decls.el AND refs.ec <= decls.ec))
+  |]
+  vs <- query_ conn [sql|
+    SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec
+    FROM decls JOIN mods USING (hieFile)
+  |]
   return $ overlay ( vertices vs ) ( edges ( map (\( x :. y ) -> ( x, y )) es ) )
 
 getVertices :: HieDb -> [Symbol] -> IO [Vertex]
@@ -183,9 +198,11 @@ getVertices (getConn -> conn) ss = Set.toList <$> foldM f Set.empty ss
       let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
           m = moduleNameString $ moduleName $ symModule s
           u = unitIdString (moduleUnitId $ symModule s)
-      query conn "SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec \
-                 \FROM decls JOIN mods USING (hieFile) \
-                 \WHERE ( decls.occ = ? AND mods.mod = ? AND mods.unit = ? ) " (n, m, u)
+      query conn [sql|
+          SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec
+          FROM decls JOIN mods USING (hieFile)
+          WHERE ( decls.occ = ? AND mods.mod = ? AND mods.unit = ? )
+      |] (n, m, u)
 
 getReachable :: HieDb -> [Symbol] -> IO [Vertex]
 getReachable db symbols = fst <$> getReachableUnreachable db symbols

@@ -4,6 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE QuasiQuotes #-}
 module HieDb.Create where
 
 import Prelude hiding (mod)
@@ -21,6 +22,7 @@ import Control.Exception
 import System.Directory
 
 import Database.SQLite.Simple
+import Database.SQLite.Simple.QQ (sql)
 import Data.Time.Clock
 import Data.List ( isSuffixOf )
 import Data.String
@@ -64,76 +66,88 @@ initConn (getConn -> conn) = do
   execute_ conn "PRAGMA foreign_keys = ON;"
   execute_ conn "PRAGMA defer_foreign_keys = ON;"
 
-  execute_ conn "CREATE TABLE IF NOT EXISTS mods \
-                \( hieFile TEXT NOT NULL PRIMARY KEY ON CONFLICT REPLACE \
-                \, mod     TEXT NOT NULL \
-                \, unit    TEXT NOT NULL \
-                \, is_boot BOOL NOT NULL \
-                \, hs_src  TEXT UNIQUE ON CONFLICT REPLACE \
-                \, is_real BOOL NOT NULL \
-                \, time    TEXT NOT NULL \
-                \, CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE \
-                \)"
+  execute_ conn [sql|
+    CREATE TABLE IF NOT EXISTS mods
+    ( hieFile TEXT NOT NULL PRIMARY KEY ON CONFLICT REPLACE
+    , mod     TEXT NOT NULL
+    , unit    TEXT NOT NULL
+    , is_boot BOOL NOT NULL
+    , hs_src  TEXT UNIQUE ON CONFLICT REPLACE
+    , is_real BOOL NOT NULL
+    , time    TEXT NOT NULL
+    , CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE
+    )
+  |]
 
-  execute_ conn "CREATE TABLE IF NOT EXISTS refs \
-                \( hieFile TEXT NOT NULL \
-                \, occ     TEXT NOT NULL \
-                \, mod     TEXT NOT NULL \
-                \, unit    TEXT NOT NULL \
-                \, file    TEXT NOT NULL \
-                \, sl   INTEGER NOT NULL \
-                \, sc   INTEGER NOT NULL \
-                \, el   INTEGER NOT NULL \
-                \, ec   INTEGER NOT NULL \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
-                \)"
+  execute_ conn [sql|
+    CREATE TABLE IF NOT EXISTS refs
+    ( hieFile TEXT    NOT NULL
+    , occ     TEXT    NOT NULL
+    , mod     TEXT    NOT NULL
+    , unit    TEXT    NOT NULL
+    , file    TEXT    NOT NULL
+    , sl      INTEGER NOT NULL
+    , sc      INTEGER NOT NULL
+    , el      INTEGER NOT NULL
+    , ec      INTEGER NOT NULL
+    , FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    )
+  |]
 
-  execute_ conn "CREATE TABLE IF NOT EXISTS decls \
-                \( hieFile    TEXT NOT NULL \
-                \, occ        TEXT NOT NULL \
-                \, file       TEXT NOT NULL \
-                \, sl      INTEGER NOT NULL \
-                \, sc      INTEGER NOT NULL \
-                \, el      INTEGER NOT NULL \
-                \, ec      INTEGER NOT NULL \
-                \, is_root    BOOL NOT NULL \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
-                \)"
+  execute_ conn [sql|
+    CREATE TABLE IF NOT EXISTS decls
+    ( hieFile    TEXT    NOT NULL
+    , occ        TEXT    NOT NULL
+    , file       TEXT    NOT NULL
+    , sl         INTEGER NOT NULL
+    , sc         INTEGER NOT NULL
+    , el         INTEGER NOT NULL
+    , ec         INTEGER NOT NULL
+    , is_root    BOOL    NOT NULL
+    , FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    )
+  |]
 
-  execute_ conn "CREATE TABLE IF NOT EXISTS defs \
-                \( hieFile    TEXT NOT NULL \
-                \, occ        TEXT NOT NULL \
-                \, file       TEXT NOT NULL \
-                \, sl      INTEGER NOT NULL \
-                \, sc      INTEGER NOT NULL \
-                \, el      INTEGER NOT NULL \
-                \, ec      INTEGER NOT NULL \
-                \, type    TEXT             \
-                \, docs    TEXT             \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
-                \, PRIMARY KEY(hieFile,occ) \
-                \)"
+  execute_ conn [sql|
+    CREATE TABLE IF NOT EXISTS defs
+    ( hieFile    TEXT    NOT NULL
+    , occ        TEXT    NOT NULL
+    , file       TEXT    NOT NULL
+    , sl         INTEGER NOT NULL
+    , sc         INTEGER NOT NULL
+    , el         INTEGER NOT NULL
+    , ec         INTEGER NOT NULL
+    , type       TEXT            
+    , docs       TEXT            
+    , FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    , PRIMARY KEY(hieFile,occ)
+    )
+  |]
 
-  execute_ conn "CREATE TABLE IF NOT EXISTS typenames \
-                \( id      INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT \
-                \, name       TEXT NOT NULL \
-                \, mod        TEXT NOT NULL \
-                \, unit       TEXT NOT NULL \
-                \, CONSTRAINT uniqname UNIQUE (name, mod, unit) ON CONFLICT IGNORE \
-                \)"
+  execute_ conn [sql|
+    CREATE TABLE IF NOT EXISTS typenames
+    ( id         INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+    , name       TEXT    NOT NULL
+    , mod        TEXT    NOT NULL
+    , unit       TEXT    NOT NULL
+    , CONSTRAINT uniqname UNIQUE (name, mod, unit) ON CONFLICT IGNORE
+    )
+  |]
 
-  execute_ conn "CREATE TABLE IF NOT EXISTS typerefs \
-                \( id   INTEGER NOT NULL \
-                \, hieFile    TEXT NOT NULL \
-                \, depth   INTEGER NOT NULL \
-                \, file       TEXT NOT NULL \
-                \, sl      INTEGER NOT NULL \
-                \, sc      INTEGER NOT NULL \
-                \, el      INTEGER NOT NULL \
-                \, ec      INTEGER NOT NULL \
-                \, FOREIGN KEY(id) REFERENCES typenames(id) DEFERRABLE INITIALLY DEFERRED \
-                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
-                \)"
+  execute_ conn [sql|
+    CREATE TABLE IF NOT EXISTS typerefs
+    ( id      INTEGER NOT NULL
+    , hieFile TEXT    NOT NULL
+    , depth   INTEGER NOT NULL
+    , file    TEXT    NOT NULL
+    , sl      INTEGER NOT NULL
+    , sc      INTEGER NOT NULL
+    , el      INTEGER NOT NULL
+    , ec      INTEGER NOT NULL
+    , FOREIGN KEY(id) REFERENCES typenames(id) DEFERRABLE INITIALLY DEFERRED
+    , FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    )
+  |]
 
 addArr :: HieDb -> A.Array TypeIndex HieTypeFlat -> IO (A.Array TypeIndex (Maybe Int64))
 addArr (getConn -> conn) arr = do
