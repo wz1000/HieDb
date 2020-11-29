@@ -53,7 +53,7 @@ checkVersion k db@(getConn -> conn) = do
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
 withHieDb fp f = withConnection fp (checkVersion f . flip HieDb Nothing)
 
-withHieDb' :: FilePath -> FilePath -> (HieDb -> IO a) -> IO a
+withHieDb' :: LibDir -> FilePath -> (HieDb -> IO a) -> IO a
 withHieDb' libdir fp f = do
   df <- dynFlagsForPrinting libdir
   withConnection fp (checkVersion f . flip HieDb (Just df))

@@ -111,8 +111,8 @@ withHieFile :: (NameCacheMonad m, MonadIO m)
             -> (HieFile -> m a)
             -> m a
 withHieFile path act = do
-  nc <- getNcUpdater
-  hiefile <- liftIO $ readHieFile nc path
+  ncu <- getNcUpdater
+  hiefile <- liftIO $ readHieFile ncu path
   act (hie_file_result hiefile)
 
 tryAll :: Monad m => (a -> m (Either b c)) -> [a] -> m (Maybe c)
@@ -130,18 +130,16 @@ findDefInFile occ mdl file = do
   ncr <- newIORef =<< makeNc
   _ <- runDbM ncr $ withHieFile file (const $ return ())
   nc <- readIORef ncr
-  case lookupOrigNameCache (nsNames nc) mdl occ of
+  return $ case lookupOrigNameCache (nsNames nc) mdl occ of
     Just name -> case nameSrcSpan name of
-      RealSrcSpan sp -> return $ Right (sp, mdl)
-      UnhelpfulSpan msg -> return $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
-    Nothing -> return $ Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnitId mdl)
+      RealSrcSpan sp -> Right (sp, mdl)
+      UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
+    Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnitId mdl)
 
 pointCommand :: HieFile -> (Int, Int) -> Maybe (Int, Int) -> (HieAST TypeIndex -> a) -> [a]
 pointCommand hf (sl,sc) mep k =
     catMaybes $ M.elems $ flip M.mapWithKey (getAsts $ hie_asts hf) $ \fs ast ->
-      case selectSmallestContaining (sp fs) ast of
-        Nothing -> Nothing
-        Just ast' -> Just $ k ast'
+      k <$> selectSmallestContaining (sp fs) ast
  where
    sloc fs = mkRealSrcLoc fs sl sc
    eloc fs = case mep of
@@ -149,8 +147,8 @@ pointCommand hf (sl,sc) mep k =
      Just (el,ec) -> mkRealSrcLoc fs el ec
    sp fs = mkRealSrcSpan (sloc fs) (eloc fs)
 
-dynFlagsForPrinting :: FilePath -> IO DynFlags
-dynFlagsForPrinting libdir = do
+dynFlagsForPrinting :: LibDir -> IO DynFlags
+dynFlagsForPrinting (LibDir libdir) = do
   systemSettings <- initSysTools
 #if __GLASGOW_HASKELL__ >= 808
                     libdir

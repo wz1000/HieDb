@@ -193,14 +193,14 @@ getReachable db symbols = fst <$> getReachableUnreachable db symbols
 getUnreachable :: HieDb -> [Symbol] -> IO [Vertex]
 getUnreachable db symbols = snd <$> getReachableUnreachable db symbols
 
-html :: HieDb -> [Symbol] -> IO ()
+html :: (NameCacheMonad m, MonadIO m) => HieDb -> [Symbol] -> m ()
 html db symbols = do
-    m <- getAnnotations db symbols
+    m <- liftIO $ getAnnotations db symbols
     forM_ (Map.toList m) $ \(fp, (mod', sps)) -> do
         code <- sourceCode fp
         let fp' = replaceExtension fp "html"
-        putStrLn $ moduleNameString mod' ++ ": " ++ fp'
-        Html.generate fp' mod' code $ Set.toList sps
+        liftIO $ putStrLn $ moduleNameString mod' ++ ": " ++ fp'
+        liftIO $ Html.generate fp' mod' code $ Set.toList sps
 
 getAnnotations :: HieDb -> [Symbol] -> IO (Map FilePath (ModuleName, Set Html.Span))
 getAnnotations db symbols = do

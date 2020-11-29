@@ -205,6 +205,7 @@ instance FromRow DefRow where
                    <*> field
 
 
+{-| Monad with access to 'NameCacheUpdater', which is needed to deserialize .hie files -}
 class Monad m => NameCacheMonad m where
   getNcUpdater :: m NameCacheUpdater
 
@@ -271,3 +272,7 @@ readSymbol = do
               , symModule = mkModule uid mn
               }
   return sym
+
+-- | GHC Library Directory. Typically you'll want to use
+-- @libdir@ from <https://hackage.haskell.org/package/ghc-paths ghc-paths>
+newtype LibDir = LibDir FilePath
