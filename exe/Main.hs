@@ -1,7 +1,8 @@
 module Main where
 
-import HieDb.Run
 import GHC.Paths (libdir)
+import HieDb.Run (hiedbMain)
+import HieDb.Types (LibDir (..))
 
 main :: IO ()
-main = hiedbMain libdir
+main = hiedbMain (LibDir libdir)

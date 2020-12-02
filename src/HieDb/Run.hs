@@ -42,7 +42,7 @@ import Options.Applicative
 import HieDb
 import HieDb.Dump
 
-hiedbMain :: FilePath -> IO ()
+hiedbMain :: LibDir -> IO ()
 hiedbMain libdir = do
   defaultLoc <- getXdgDirectory XdgData $ "default_"++ show dB_VERSION ++".hiedb"
   defdb <- fromMaybe defaultLoc <$> lookupEnv "HIEDB"
@@ -199,7 +199,7 @@ progress l total cur act f = do
   liftIO $ putStr " done\r"
   return x
 
-runCommand :: FilePath -> Options -> Command -> IO ()
+runCommand :: LibDir -> Options -> Command -> IO ()
 runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
   when (trace opts) $
     setHieTrace conn (Just $ T.hPutStrLn stderr . ("\n****TRACE: "<>))
@@ -327,11 +327,15 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
         (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
     go conn RefGraph =
       declRefs conn
-    go _ (Dump path) =
-      dump libdir path
+    go conn (Dump path) = do
+      let Just dynFlags = getDbDynFlags conn
+      nc <- newIORef =<< makeNc
+      runDbM nc $ dump dynFlags path
     go conn (Reachable s) = getReachable conn s >>= mapM_ print
     go conn (Unreachable s) = getUnreachable conn s >>= mapM_ print
-    go conn (Html s) = html conn s
+    go conn (Html s) = do
+      nc <- newIORef =<< makeNc
+      runDbM nc $ html conn s
 
 printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do

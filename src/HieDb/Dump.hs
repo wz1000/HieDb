@@ -1,59 +1,34 @@
-{-# language DisambiguateRecordFields #-}
-{-# language NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module HieDb.Dump where
 
-import qualified Data.Map.Strict as Map
-import qualified Compat.HieBin as HieBin
-import           HieDb.Utils ( dynFlagsForPrinting )
 import qualified Compat.HieDebug as HieDebug
 import qualified Compat.HieTypes as HieTypes
-import           Compat.HieTypes ( HieFile(..) )
-import qualified NameCache
-import qualified Outputable
-import           Data.Text (Text)
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified UniqSupply
-import Data.IORef
+import qualified Outputable
 
-dump :: FilePath -> FilePath -> IO ()
-dump libdir hieFilePath = do
-  nameCache <- do
-    uniqueSupply <-
-      UniqSupply.mkSplitUniqSupply 'z'
+import           Compat.HieTypes (HieFile (..))
+import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Data.Text (Text)
+import           DynFlags (DynFlags)
+import           HieDb.Types (NameCacheMonad)
+import           HieDb.Utils (withHieFile)
 
-    newIORef ( NameCache.initNameCache uniqueSupply [] )
+{-| Pretty print Hie AST stored in given .hie file -}
+dump ::
+    (NameCacheMonad m, MonadIO m)
+    => DynFlags
+    -> FilePath -- ^ Path to .hie file
+    -> m ()
+dump dynFlags hieFilePath = do
+  withHieFile hieFilePath $ \HieFile{ hie_asts } -> do
+    let (_, astRoot) = Map.findMin $ HieTypes.getAsts hie_asts
+    liftIO $ putStrLn $ Outputable.showSDoc dynFlags $ HieDebug.ppHie astRoot
 
-  HieBin.HieFileResult{ hie_file_result } <-
-    HieBin.readHieFile (HieBin.NCU $ atomicModifyIORef' nameCache) hieFilePath
-
-  let
-    HieFile{ hie_asts } =
-      hie_file_result
-
-    astRoot =
-      HieTypes.getAsts hie_asts
-        Map.! head ( Map.keys ( HieTypes.getAsts hie_asts ) )
-
-  dynFlags <-
-    dynFlagsForPrinting libdir
-
-  putStrLn
-    ( Outputable.showSDoc
-        dynFlags
-        ( HieDebug.ppHie astRoot )
-    )
-
-sourceCode :: FilePath -> IO [Text]
-sourceCode hieFilePath = do
-  nameCache <- do
-    uniqueSupply <-
-      UniqSupply.mkSplitUniqSupply 'z'
-
-    newIORef ( NameCache.initNameCache uniqueSupply [] )
-
-  HieBin.HieFileResult{ hie_file_result } <-
-    HieBin.readHieFile (HieBin.NCU $ atomicModifyIORef' nameCache) hieFilePath
-
-  return $ T.lines $ T.decodeUtf8 $ hie_hs_src hie_file_result
+{-| Get lines of original source code from given .hie file -}
+sourceCode :: (NameCacheMonad m, MonadIO m) => FilePath -> m [Text]
+sourceCode hieFilePath =
+  withHieFile hieFilePath $ \HieFile {hie_hs_src} ->
+    return $ T.lines $ T.decodeUtf8 hie_hs_src
