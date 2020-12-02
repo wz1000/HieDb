@@ -31,7 +31,6 @@ import Control.Monad.IO.Class
 
 import Data.Maybe
 import Data.Either
-import Data.List (intercalate)
 import Data.Foldable
 import Data.IORef
 
@@ -258,20 +257,13 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
                 cf <- canonicalizePath f
                 deleteFileFromIndex conn cf
             Right (mn,muid) -> do
-              euid <- maybe (resolveUnitId conn mn) (return . Right) muid
-              case euid of
-                Left err -> reportAmbiguousErr $ Left err
-                Right uid -> do
-                  mFile <- lookupHieFile conn mn uid
-                  case mFile of
-                    Nothing -> reportAmbiguousErr $ Left (NotIndexed mn $ Just uid)
-                    Just x -> deleteFileFromIndex conn (hieModuleHieFile x)
-    go conn (ModuleUIDs mn) = do
-      euid <- resolveUnitId conn mn
-      case euid of
-        Right x -> print x
-        Left (AmbiguousUnitId xs) -> mapM_ print xs
-        err -> void $ reportAmbiguousErr err
+              uid <- reportAmbiguousErr =<< maybe (resolveUnitId conn mn) (return . Right) muid
+              mFile <- lookupHieFile conn mn uid
+              case mFile of
+                Nothing -> reportAmbiguousErr $ Left (NotIndexed mn $ Just uid)
+                Just x -> deleteFileFromIndex conn (hieModuleHieFile x)
+    go conn (ModuleUIDs mn) =
+      print =<< reportAmbiguousErr =<< resolveUnitId conn mn
     go conn (LookupHieFile mn muid) = reportAmbiguousErr =<< do
       euid <- maybe (resolveUnitId conn mn) (return . Right) muid
       case euid of
@@ -365,22 +357,20 @@ hieFileCommand conn target f = join $ reportAmbiguousErr =<< withTarget conn tar
 
 reportAmbiguousErr :: Either HieDbErr a -> IO a
 reportAmbiguousErr (Right x) = return x
-reportAmbiguousErr (Left (NotIndexed mn muid)) = do
-  putStrLn $ unwords ["Module",moduleNameString mn ++ maybe "" (\uid -> "("++show uid++")") muid, "not indexed."]
-  exitFailure
-reportAmbiguousErr (Left (AmbiguousUnitId xs)) = do
-  putStrLn $ unwords ["UnitId could be any of:",intercalate "," (map show $ toList xs)]
-  exitFailure
-reportAmbiguousErr (Left (NameNotFound occ mn muid)) = do
-  putStrLn $ unwords
-    ["Couldn't find name:",occNameString occ
-    ,maybe "" (("from module " ++) . moduleNameString) mn ++ maybe "" (\uid ->"("++show uid++")") muid]
-  exitFailure
-reportAmbiguousErr (Left (NameUnhelpfulSpan nm msg)) = do
-  putStrLn $ unwords
-    ["Got no helpful spans for:", occNameString (nameOccName nm), "\nMsg:", msg]
+reportAmbiguousErr (Left e) = do
+  putStrLn $ showHieDbErr e
   exitFailure
 
+showHieDbErr :: HieDbErr -> String
+showHieDbErr e = case e of
+  NotIndexed mn muid -> unwords ["Module", moduleNameString mn ++ maybe "" (\uid -> "("++show uid++")") muid, "not indexed."]
+  AmbiguousUnitId xs -> unlines $ "UnitId could be any of:" : map ((" - "<>) . unitIdString . modInfoUnit) (toList xs)
+    <> ["Use --unit-id to disambiguate"]
+  NameNotFound occ mn muid -> unwords
+    ["Couldn't find name:", occNameString occ, maybe "" (("from module " ++) . moduleNameString) mn ++ maybe "" (\uid ->"("++show uid++")") muid]
+  NameUnhelpfulSpan nm msg -> unwords
+    ["Got no helpful spans for:", occNameString (nameOccName nm), "\nMsg:", msg]
+ 
 reportRefSpans :: [(Module,(Int,Int),(Int,Int))] -> IO ()
 reportRefSpans = traverse_ $ \(mn,(sl,sc),(el,ec)) ->
   putStrLn $ concat
