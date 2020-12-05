@@ -38,16 +38,21 @@ import           HieDb.Utils
 import           HieDb.Create
 import qualified HieDb.Html as Html
 
+{-| List all modules indexed in HieDb. -}
 getAllIndexedMods :: HieDb -> IO [HieModuleRow]
 getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
+{-| Lookup UnitId associated with given ModuleName.
+HieDbErr is returned if no module with given name has been indexed
+or if ModuleName is ambiguous (i.e. there are multiple packages containing module with given name)
+-}
 resolveUnitId :: HieDb -> ModuleName -> IO (Either HieDbErr UnitId)
 resolveUnitId (getConn -> conn) mn = do
-  luid <- query conn "SELECT mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
-  case luid of
-    [] -> return $ Left $ NotIndexed mn Nothing
-    [x] -> return $ Right $ modInfoUnit x
-    (x:xs) -> return $ Left $ AmbiguousUnitId $ x :| xs
+  luid <- query conn "SELECT mod, unit, is_boot, hs_src, is_real, time FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
+  return $ case luid of
+    [] ->  Left $ NotIndexed mn Nothing
+    [x] -> Right $ modInfoUnit x
+    (x:xs) -> Left $ AmbiguousUnitId $ x :| xs
 
 search :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res RefRow]
 search (getConn -> conn) isReal occ mn uid exclude =
@@ -60,6 +65,7 @@ search (getConn -> conn) isReal occ mn uid exclude =
       \WHERE refs.occ = :occ AND (:mod IS NULL OR refs.mod = :mod) AND (:unit is NULL OR refs.unit = :unit) AND ( (NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
       <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
 
+{-| Lookup 'HieModule' row from 'HieDb' given its 'ModuleName' and 'UnitId' -}
 lookupHieFile :: HieDb -> ModuleName -> UnitId -> IO (Maybe HieModuleRow)
 lookupHieFile (getConn -> conn) mn uid = do
   files <- query conn "SELECT * FROM mods WHERE mod = ? AND unit = ? AND is_boot = 0" (mn, uid)
@@ -71,6 +77,7 @@ lookupHieFile (getConn -> conn) mn uid = do
             ++ show (moduleNameString mn, uid) ++ ". Entries: "
             ++ intercalate ", " (map hieModuleHieFile xs)
 
+{-| Lookup 'HieModule' row from 'HieDb' given the path to the Haskell source file -}
 lookupHieFileFromSource :: HieDb -> FilePath -> IO (Maybe HieModuleRow)
 lookupHieFileFromSource (getConn -> conn) fp = do
   files <- query conn "SELECT * FROM mods WHERE hs_src = ?" (Only fp)
@@ -113,31 +120,34 @@ searchDef conn cs
                          \WHERE occ LIKE ? \
                          \LIMIT 200" (Only $ '_':cs++"%")
 
+{-| @withTarget db t f@ runs function @f@ with HieFile specified by HieTarget @t@.
+In case the target is given by ModuleName (and optionally UnitId) it is first resolved
+from HieDb, which can lead to error if given file is not indexed/Module name is ambiguous.
+-}
 withTarget
   :: HieDb
-  -> Either FilePath (ModuleName, Maybe UnitId)
+  -> HieTarget
   -> (HieFile -> a)
   -> IO (Either HieDbErr a)
-withTarget conn (Left x') f = do
-  x <- canonicalizePath x'
-  nc <- newIORef =<< makeNc
-  runDbM nc $ do
-    addRefsFrom conn x
-    Right <$> withHieFile x (return . f)
-withTarget conn (Right (mn, muid)) f = do
-  euid <- maybe (resolveUnitId conn mn) (return . Right) muid
-  case euid of
-    Left err -> return $ Left err
-    Right uid -> do
-      mFile <- lookupHieFile conn mn uid
-      case mFile of
-        Nothing -> return $ Left (NotIndexed mn $ Just uid)
-        Just x -> do
-          nc <- newIORef =<< makeNc
-          runDbM nc $ do
-            file <- liftIO $ canonicalizePath (hieModuleHieFile x)
-            addRefsFrom conn file
-            Right <$> withHieFile file (return . f)
+withTarget conn target f = case target of
+  Left fp -> processHieFile fp
+  Right (mn,muid) -> do
+    euid <- maybe (resolveUnitId conn mn) (return . Right) muid
+    case euid of
+      Left err -> return $ Left err
+      Right uid -> do
+        mModRow <- lookupHieFile conn mn uid
+        case mModRow of
+          Nothing -> return $ Left (NotIndexed mn $ Just uid)
+          Just modRow -> processHieFile (hieModuleHieFile modRow)
+  where
+    processHieFile fp = do
+      fp' <- canonicalizePath fp
+      nc <- newIORef =<< makeNc
+      runDbM nc $ do
+        addRefsFrom conn fp'
+        Right <$> withHieFile fp' (return . f)
+  
 
 type Vertex = (String, String, String, Int, Int, Int, Int)
 

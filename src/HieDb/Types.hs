@@ -49,11 +49,12 @@ setHieTrace (getConn -> conn) = setTrace conn
 data ModuleInfo
   = ModuleInfo
   { modInfoName :: ModuleName
-  , modInfoUnit :: UnitId
-  , modInfoIsBoot :: Bool
-  , modInfoSrcFile :: Maybe FilePath
-  , modInfoIsReal :: Bool -- Does this represent an actual file or a cached dep?
-  , modInfoTime :: UTCTime
+  , modInfoUnit :: UnitId -- ^ Identifies the package this module is part of
+  , modInfoIsBoot :: Bool -- ^ True, when this ModuleInfo was created by indexing .hie-boot file;
+                          -- False when it was created from .hie file
+  , modInfoSrcFile :: Maybe FilePath -- ^ Tha path to the haskell source file, from which the .hie file was created
+  , modInfoIsReal :: Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
+  , modInfoTime :: UTCTime -- ^ The last modification time of the .hie file from which this ModuleInfo was created
   }
 
 instance Show ModuleInfo where
@@ -107,7 +108,7 @@ instance FromField OccName where
 
 data HieModuleRow
   = HieModuleRow
-  { hieModuleHieFile :: FilePath
+  { hieModuleHieFile :: FilePath -- ^ Full path to .hie file based on which this row was created
   , hieModInfo :: ModuleInfo
   }
 
@@ -273,3 +274,8 @@ readSymbol = do
 -- | GHC Library Directory. Typically you'll want to use
 -- @libdir@ from <https://hackage.haskell.org/package/ghc-paths ghc-paths>
 newtype LibDir = LibDir FilePath
+
+-- | A way to specify which HieFile to operate on.
+-- Either the path to .hie file is given in the Left
+-- Or ModuleName (with optional UnitId) is given in the Right
+type HieTarget = Either FilePath (ModuleName, Maybe UnitId)

@@ -168,7 +168,6 @@ cmdParser
                            $ progDesc "Find all symbols unreachable from the given symbols")
   <> command "html" (info (Html <$> some symbolParser)
                     $ progDesc "generate html files for reachability from the given symbols")
-type HieTarget = Either FilePath (ModuleName,Maybe UnitId)
 
 posParser :: Char -> Parser (Int,Int)
 posParser c = (,) <$> argument auto (metavar $ c:"LINE") <*> argument auto (metavar $ c:"COL")

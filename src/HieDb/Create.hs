@@ -38,8 +38,11 @@ sCHEMA_VERSION = 3
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
 
-
-checkVersion :: (HieDb -> IO a) -> (HieDb -> IO a)
+{-| @checkVersion f db@ checks the schema version associated with given @db@.
+If that version is supported by hiedb, it runs the function @f@ with the @db@.
+Otherwise it throws 'IncompatibleSchemaVersion' exception.
+-}
+checkVersion :: (HieDb -> IO a) -> HieDb -> IO a
 checkVersion k db@(getConn -> conn) = do
   [Only ver] <- query_ conn "PRAGMA user_version"
   if ver == 0 then do
@@ -53,11 +56,16 @@ checkVersion k db@(getConn -> conn) = do
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
 withHieDb fp f = withConnection fp (checkVersion f . flip HieDb Nothing)
 
+{-| Given GHC LibDir and path to ".hiedb" file,
+ constructs a 'HieDb' and passes it to given function.
+-}
 withHieDb' :: LibDir -> FilePath -> (HieDb -> IO a) -> IO a
 withHieDb' libdir fp f = do
   df <- dynFlagsForPrinting libdir
   withConnection fp (checkVersion f . flip HieDb (Just df))
 
+{-| Initialize database schema for given 'HieDb'.
+-}
 initConn :: HieDb -> IO ()
 initConn (getConn -> conn) = do
   execute_ conn "PRAGMA journal_mode = WAL;"
@@ -135,7 +143,7 @@ initConn (getConn -> conn) = do
 
 addArr :: HieDb -> A.Array TypeIndex HieTypeFlat -> IO (A.Array TypeIndex (Maybe Int64))
 addArr (getConn -> conn) arr = do
-  fmap (A.listArray (A.bounds arr)) $ forM (A.elems arr) $ \case
+  forM arr $ \case
     HTyVarTy n -> addName n
     HTyConApp tc _ -> addName (ifaceTyConName tc)
     _ -> pure Nothing
@@ -154,7 +162,7 @@ addTypeRefs :: HieDb -> FilePath -> HieFile -> A.Array TypeIndex (Maybe Int64) -
 addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
   where
     arr = hie_types hf
-    asts = M.elems $ getAsts $ hie_asts hf
+    asts = getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
       mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ mapMaybe identType $ M.elems $ nodeIdentifiers $ nodeInfo ast
@@ -162,6 +170,9 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
         mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ nodeType $ nodeInfo ast
       mapM_ addTypesFromAst $ nodeChildren ast
 
+{-| Adds all references from given .hie file to 'HieDb'.
+The indexing is skipped if the file was not modified since the last time it was indexed.
+-}
 addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m ()
 addRefsFrom c@(getConn -> conn) path = do
   time <- liftIO $ getModificationTime path
@@ -198,12 +209,21 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf = lift
   when isReal $
     addTypeRefs db path hf ixs
 
-addSrcFile :: HieDb -> FilePath -> FilePath -> Bool -> IO ()
-addSrcFile (getConn -> conn) hie srcFile isReal=
+{-| Add path to .hs source given path to .hie file which has already been indexed.
+No action is taken if the corresponding .hie file has not been indexed yet.
+-}
+addSrcFile
+  :: HieDb 
+  -> FilePath -- ^ Absolute path to .hie file
+  -> FilePath -- ^ Path to .hs file to be added to DB
+  -> Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
+  -> IO ()
+addSrcFile (getConn -> conn) hie srcFile isReal =
   execute conn "UPDATE mods SET hs_src = ? , is_real = ? WHERE hieFile = ?" (srcFile, isReal, hie)
 
+{-| Delete all occurrence of given .hie file from the database -}
 deleteFileFromIndex :: HieDb -> FilePath -> IO ()
-deleteFileFromIndex (getConn -> conn) path = liftIO $ withTransaction conn $ do
+deleteFileFromIndex (getConn -> conn) path = withTransaction conn $ do
   execute conn "DELETE FROM mods  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
