@@ -52,7 +52,7 @@ data ModuleInfo
   , modInfoUnit :: UnitId -- ^ Identifies the package this module is part of
   , modInfoIsBoot :: Bool -- ^ True, when this ModuleInfo was created by indexing .hie-boot file;
                           -- False when it was created from .hie file
-  , modInfoSrcFile :: Maybe FilePath -- ^ Tha path to the haskell source file, from which the .hie file was created
+  , modInfoSrcFile :: Maybe FilePath -- ^ The path to the haskell source file, from which the .hie file was created
   , modInfoIsReal :: Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
   , modInfoTime :: UTCTime -- ^ The last modification time of the .hie file from which this ModuleInfo was created
   }
