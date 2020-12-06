@@ -1,7 +1,7 @@
 module Main where
 
 import GHC.Paths (libdir)
-import HieDb (HieDb, HieModuleRow (..), ModuleInfo (..), getAllIndexedMods, withHieDb')
+import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), getAllIndexedMods, withHieDb')
 import HieDb.Run (Command (..), Options (..), runCommand)
 import Module (moduleNameString)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
@@ -85,7 +85,7 @@ runHieDbCli args = do
   hiedb <- findHieDbExecutable
   let argsWithTestDb = "--database" : testDb : args
   let createProc = proc hiedb argsWithTestDb
-  putStrLn $ unwords $ "RUNNING:" : argsWithTestDb
+  putStrLn $ unwords $ "RUNNING: hiedb" : argsWithTestDb
   readCreateProcessWithExitCode createProc ""
 
 
@@ -120,10 +120,10 @@ testTmp :: FilePath
 testTmp = "test/tmp"
 
 withTestDb :: (HieDb -> IO a) -> IO a
-withTestDb = withHieDb' libdir testDb
+withTestDb = withHieDb' (LibDir libdir) testDb
 
 runCommandTest :: Command -> IO ()
-runCommandTest = runCommand libdir testOpts
+runCommandTest = runCommand (LibDir libdir) testOpts
 
 testOpts :: Options
 testOpts = Options
