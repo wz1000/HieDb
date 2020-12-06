@@ -83,22 +83,20 @@ makeNc = do
   uniq_supply <- mkSplitUniqSupply 'z'
   return $ initNameCache uniq_supply []
 
--- | Recursively search for .hie files in given directory
+-- | Recursively search for .hie and .hie-boot files in given directory
 getHieFilesIn :: FilePath -> IO [FilePath]
 getHieFilesIn path = do
-  exists <- doesPathExist path
-  if exists then do
-    isFile <- doesFileExist path
-    isDir <- doesDirectoryExist path
-    if isFile && ("hie" `isExtensionOf` path) then do
+  isFile <- doesFileExist path
+  if isFile && ("hie" `isExtensionOf` path || "hie-boot" `isExtensionOf` path) then do
       path' <- canonicalizePath path
       return [path']
-    else if isDir then do
+  else do
+    isDir <- doesDirectoryExist path
+    if isDir then do
       cnts <- listDirectory path
       withCurrentDirectory path $ foldMap getHieFilesIn cnts
-    else return []
-  else
-    return []
+    else
+      return []
 
 withHieFile :: (NameCacheMonad m, MonadIO m)
             => FilePath
