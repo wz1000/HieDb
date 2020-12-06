@@ -1,14 +1,18 @@
 module Main where
 
 import GHC.Paths (libdir)
-import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), getAllIndexedMods, withHieDb')
+import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb')
+import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId)
 import HieDb.Run (Command (..), Options (..), runCommand)
-import Module (moduleNameString)
+import HieDb.Types (HieDbErr (..))
+import Module (mkModuleName, moduleNameString, stringToUnitId)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
 import System.Exit (ExitCode (ExitSuccess), die)
 import System.FilePath ((</>))
 import System.Process (callProcess, proc, readCreateProcessWithExitCode)
-import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, shouldBe)
+import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, shouldBe,
+                   shouldEndWith)
+import Test.Orphans ()
 
 main :: IO ()
 main = hspec spec
@@ -26,13 +30,49 @@ apiSpec = describe "api" $
   beforeAll_ (runCommandTest (Index [testTmp])) $
     around withTestDb $
       describe "HieDb.Query" $ do
-        it "getAllIndexedMods returns all indexed modules" $ \conn -> do
-          mods <- getAllIndexedMods conn
-          case mods of
-            [m1,m2] -> do
-              moduleNameString (modInfoName (hieModInfo m1)) `shouldBe` "Foo"
-              moduleNameString (modInfoName (hieModInfo m2)) `shouldBe` "One.Two.Some"
-            xs -> fail $ "Was expecting 2 modules, but got " <> show (length xs)
+
+        describe "getAllIndexedMods" $ do
+          it "returns all indexed modules" $ \conn -> do
+            mods <- getAllIndexedMods conn
+            case mods of
+              [m1,m2] -> do
+                moduleNameString (modInfoName (hieModInfo m1)) `shouldBe` "Foo"
+                moduleNameString (modInfoName (hieModInfo m2)) `shouldBe` "One.Two.Some"
+              xs -> fail $ "Was expecting 2 modules, but got " <> show (length xs)
+
+        describe "resolveUnitId" $ do
+          it "resolves unit when module unambiguous" $ \conn -> do
+            res <- resolveUnitId conn (mkModuleName "Foo")
+            case res of
+              Left e       -> fail $ "Unexpected error: " <> show e
+              Right unitId -> unitId `shouldBe` stringToUnitId "main"
+
+          it "returns NotIndexed error on not-indexed module" $ \conn -> do
+            let notIndexedModule = mkModuleName "NotIndexed"
+            res <- resolveUnitId conn notIndexedModule
+            case res of
+              Left (NotIndexed modName Nothing) -> modName `shouldBe` notIndexedModule
+              Left e                            -> fail $ "Unexpected error: " <> show e
+              Right unitId                      -> fail $ "Unexpected success: " <> show unitId
+
+        describe "lookupHieFile" $ do
+          it "Should lookup indexed Module" $ \conn -> do
+            let modName = mkModuleName "Foo"
+            res <- lookupHieFile conn modName (stringToUnitId "main")
+            case res of
+              Just modRow -> do
+                hieModuleHieFile modRow `shouldEndWith` "Foo.hie"
+                let modInfo = hieModInfo modRow
+                modInfoIsReal modInfo `shouldBe` False
+                modInfoName modInfo `shouldBe` modName
+              Nothing -> fail "Should have looked up indexed file"
+          it "Should return Nothing for not indexed Module" $ \conn -> do
+            res <- lookupHieFile conn (mkModuleName "NotIndexed") (stringToUnitId "main")
+            case res of
+              Nothing -> pure ()
+              Just _  -> fail "Lookup suceeded unexpectedly"
+
+
 
 
 cliSpec :: Spec
