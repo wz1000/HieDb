@@ -73,8 +73,6 @@ apiSpec = describe "api" $
               Just _  -> fail "Lookup suceeded unexpectedly"
 
 
-
-
 cliSpec :: Spec
 cliSpec =
   describe "Command line" $ do
@@ -140,10 +138,9 @@ cleanTestData = removeDirectoryRecursive testTmp
 compileTestModules :: IO ()
 compileTestModules =
   callProcess "ghc" $
+    "-fno-code" : -- don't produce unnecessary .o and .hi files
     "-fwrite-ide-info" :
     "-hiedir=" <> testTmp :
-    "-hidir=" <> testTmp :
-    "-odir=" <> testTmp :
     testModules
 
 
