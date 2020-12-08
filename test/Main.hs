@@ -10,8 +10,8 @@ import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRec
 import System.Exit (ExitCode (ExitSuccess), die)
 import System.FilePath ((</>))
 import System.Process (callProcess, proc, readCreateProcessWithExitCode)
-import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, shouldBe,
-                   shouldEndWith)
+import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, runIO,
+                   shouldBe, shouldEndWith)
 import Test.Orphans ()
 
 main :: IO ()
@@ -36,13 +36,13 @@ apiSpec = describe "api" $
             mods <- getAllIndexedMods conn
             case mods of
               [m1,m2] -> do
-                moduleNameString (modInfoName (hieModInfo m1)) `shouldBe` "Foo"
-                moduleNameString (modInfoName (hieModInfo m2)) `shouldBe` "One.Two.Some"
+                moduleNameString (modInfoName (hieModInfo m1)) `shouldBe` "Sub.Module2"
+                moduleNameString (modInfoName (hieModInfo m2)) `shouldBe` "Module1"
               xs -> fail $ "Was expecting 2 modules, but got " <> show (length xs)
 
         describe "resolveUnitId" $ do
           it "resolves unit when module unambiguous" $ \conn -> do
-            res <- resolveUnitId conn (mkModuleName "Foo")
+            res <- resolveUnitId conn (mkModuleName "Module1")
             case res of
               Left e       -> fail $ "Unexpected error: " <> show e
               Right unitId -> unitId `shouldBe` stringToUnitId "main"
@@ -57,11 +57,11 @@ apiSpec = describe "api" $
 
         describe "lookupHieFile" $ do
           it "Should lookup indexed Module" $ \conn -> do
-            let modName = mkModuleName "Foo"
+            let modName = mkModuleName "Module1"
             res <- lookupHieFile conn modName (stringToUnitId "main")
             case res of
               Just modRow -> do
-                hieModuleHieFile modRow `shouldEndWith` "Foo.hie"
+                hieModuleHieFile modRow `shouldEndWith` "Module1.hie"
                 let modInfo = hieModInfo modRow
                 modInfoIsReal modInfo `shouldBe` False
                 modInfoName modInfo `shouldBe` modName
@@ -85,30 +85,56 @@ cliSpec =
       it "lists the indexed modules" $ do
         cwd <- getCurrentDirectory
         let expectedOutput = unlines (fmap (\x -> cwd </> testTmp </> x)
-              [ "Foo.hie\tFoo\tmain"
-              , "One/Two/Some.hie\tOne.Two.Some\tmain"
+              [ "Sub/Module2.hie\tSub.Module2\tmain"
+              , "Module1.hie\tModule1\tmain"
               ])
         runHieDbCli ["ls"] `suceedsWithStdin` expectedOutput
 
     describe "name-refs" $
       it "lists all references of given function" $ do
-        runHieDbCli ["name-refs", "printInt"]
+        runHieDbCli ["name-refs", "function2"]
           `suceedsWithStdin` unlines
-            ["Foo:3:7-3:15"
-            ,"Foo:12:1-12:9"
-            ,"Foo:13:1-13:9"
+            [ "Module1:3:7-3:16"
+            , "Module1:12:1-12:10"
+            , "Module1:13:1-13:10"
             ]
 
     describe "point-refs" $
       it "list references at given point" $
-        runHieDbCli ["point-refs", "Foo", "13", "2"]
+        runHieDbCli ["point-refs", "Module1", "13", "2"]
           `suceedsWithStdin` unlines
-            [ "Name printInt at (13,2) is used in:"
-            , "Foo:3:7-3:15"
-            , "Foo:12:1-12:9"
-            , "Foo:13:1-13:9"
+            [ "Name function2 at (13,2) is used in:"
+            , "Module1:3:7-3:16"
+            , "Module1:12:1-12:10"
+            , "Module1:13:1-13:10"
             ]
 
+    describe "name-def" $
+      it "lookup definition of name" $
+        runHieDbCli ["name-def", "showInt"]
+          `suceedsWithStdin` "Sub.Module2:7:1-7:8\n"
+
+    describe "type-def" $
+      it "lookup definition of type" $
+        runHieDbCli ["type-def", "Data1"]
+          `suceedsWithStdin` "Sub.Module2:9:1-11:28\n"
+
+    describe "cat" $
+      describe "dumps module source stored in .hie file" $ do
+        module1Src <- runIO . readFile $ "test" </> "data" </> "Module1.hs"
+        it "when given --hiefile" $ do
+          cwd <- getCurrentDirectory
+          runHieDbCli ["cat", "--hiefile" , cwd </> testTmp </> "Module1.hie"]
+            `suceedsWithStdin` (module1Src <> "\n")
+        it "when given module name" $
+          runHieDbCli ["cat", "Module1"]
+            `suceedsWithStdin` (module1Src <> "\n")
+
+    describe "lookup-hie" $
+      it "looks up location of .hie file" $ do
+        cwd <- getCurrentDirectory
+        runHieDbCli ["lookup-hie", "Module1"]
+          `suceedsWithStdin` (cwd </> testTmp </> "Module1.hie\n")
 
 suceedsWithStdin :: IO (ExitCode, String, String) -> String -> Expectation
 suceedsWithStdin action expectedStdin = do
@@ -145,16 +171,16 @@ compileTestModules =
 
 
 testModules :: [FilePath]
-testModules = fmap ("test/data"</>)
-  [ "Foo.hs"
-  , "One/Two/Some.hs"
+testModules = fmap (\m -> "test" </> "data"</> m)
+  [ "Module1.hs"
+  , "Sub" </> "Module2.hs"
   ]
 
 testDb :: FilePath
 testDb = testTmp </> "test.hiedb"
 
 testTmp :: FilePath
-testTmp = "test/tmp"
+testTmp = "test" </> "tmp"
 
 withTestDb :: (HieDb -> IO a) -> IO a
 withTestDb = withHieDb' (LibDir libdir) testDb
