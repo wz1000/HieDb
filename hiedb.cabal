@@ -57,3 +57,19 @@ library
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
+
+test-suite hiedb-tests
+    type:               exitcode-stdio-1.0
+    hs-source-dirs:     test
+    main-is:            Main.hs
+    other-modules:      Test.Orphans
+    build-tool-depends: hiedb:hiedb
+    build-depends:      base >= 4.12 && < 4.15
+                      , directory
+                      , filepath
+                      , ghc >= 8.6
+                      , ghc-paths
+                      , hiedb
+                      , hspec
+                      , process
+    default-language:   Haskell2010
