@@ -7,7 +7,7 @@ import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..))
 import Module (mkModuleName, moduleNameString, stringToUnitId)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
-import System.Exit (ExitCode (ExitSuccess), die)
+import System.Exit (ExitCode (..), die)
 import System.FilePath ((</>))
 import System.Process (callProcess, proc, readCreateProcessWithExitCode)
 import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, runIO,
@@ -75,6 +75,7 @@ apiSpec = describe "api" $
 
 cliSpec :: Spec
 cliSpec =
+  -- TODO commands not covered: init, type-refs, ref-graph, dump, reachable, unreachable, html
   describe "Command line" $ do
     describe "index" $
       it "indexes testing project .hie files" $ do
@@ -109,6 +110,46 @@ cliSpec =
             , "Module1:13:1-13:10"
             ]
 
+    describe "point-types" $ do
+      it "list references at point when there's Type" $
+        runHieDbCli ["point-refs", "Module1", "8", "21"]
+          `suceedsWithStdin` unlines
+            [ "Name String at (8,21) is used in:"
+            , "Sub.Module2:6:19-6:25"
+            , "Module1:8:21-8:27"
+            ]
+      it "Give no output at point when there's not Type" $
+        runHieDbCli ["point-refs", "Module1", "7", "1"]
+          `suceedsWithStdin` ""
+
+    describe "point-defs" $ do
+      it "outputs the location of symbol when definition site can be found is indexed" $
+        runHieDbCli ["point-defs", "Module1", "13", "29"]
+          `suceedsWithStdin` unlines
+            [ "Name showInt at (13,29) is defined at:"
+            , "Sub.Module2:7:1-7:8"
+            ]
+      it "suceeds with no output when there's no symbol at given point" $
+        runHieDbCli ["point-defs", "Module1", "13", "13"]
+          `suceedsWithStdin` ""
+      it "fails with informative error message when the difinition can't be found" $ do
+        (exitCode, actualStdout, _) <- runHieDbCli ["point-defs", "Module1", "13", "24"]
+        exitCode `shouldBe` ExitFailure 1
+        actualStdout `shouldBe` "Couldn't find name: $ from module GHC.Base(base)\n"
+
+    describe "point-info" $
+      it "gives information about symbol at specified location" $
+        runHieDbCli ["point-info", "Sub.Module2", "10", "10"]
+          `suceedsWithStdin` unlines
+            [ "Span: test/data/Sub/Module2.hs:10:7-23"
+            , "Constructors: {(ConDeclH98, ConDecl)}"
+            , "Identifiers:"
+            , "Symbol:c:Data1Constructor1:Sub.Module2:main"
+            , "Data1Constructor1 defined at test/data/Sub/Module2.hs:10:7-23"
+            , "    IdentifierDetails Nothing {Decl ConDec (Just SrcSpanOneLine \"test/data/Sub/Module2.hs\" 10 7 24)}"
+            , "Types:\n"
+            ]
+
     describe "name-def" $
       it "lookup definition of name" $
         runHieDbCli ["name-def", "showInt"]
@@ -135,6 +176,21 @@ cliSpec =
         cwd <- getCurrentDirectory
         runHieDbCli ["lookup-hie", "Module1"]
           `suceedsWithStdin` (cwd </> testTmp </> "Module1.hie\n")
+
+    describe "module-uids" $
+      it "lists uids for given module" $
+        runHieDbCli ["module-uids", "Module1"]
+          `suceedsWithStdin` "main\n"
+    
+    describe "rm" $
+      it "removes given module from DB" $ do
+        runHieDbCli ["rm", "Module1"]
+          `suceedsWithStdin` ""
+        -- Check with 'ls' comand that there's just one module left
+        cwd <- getCurrentDirectory
+        runHieDbCli ["ls"] `suceedsWithStdin` (cwd </> testTmp </> "Sub/Module2.hie\tSub.Module2\tmain\n")
+    
+
 
 suceedsWithStdin :: IO (ExitCode, String, String) -> String -> Expectation
 suceedsWithStdin action expectedStdin = do
