@@ -50,7 +50,6 @@ import Database.SQLite.Simple
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
   where
-    file = FS.unpackFS $ srcSpanFile sp
     sl = srcSpanStartLine sp
     sc = srcSpanStartCol sp
     el = srcSpanEndLine sp
@@ -60,8 +59,8 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
       case ixs A.! i of
         Nothing -> pure ()
         Just occ -> do
-          let ref = TypeRef occ hf d file sl sc el ec
-          execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?,?)" ref
+          let ref = TypeRef occ hf d sl sc el ec
+          execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?)" ref
       let next = go (d+1)
       case arr A.! i of
         HTyVarTy _ -> pure ()
@@ -167,10 +166,9 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
 
     goRef (Right name, (sp,_))
       | Just mod <- nameModule_maybe name = Just $
-          RefRow path occ (moduleName mod) (moduleUnitId mod) file sl sc el ec
+          RefRow path occ (moduleName mod) (moduleUnitId mod) sl sc el ec
           where
             occ = nameOccName name
-            file = FS.unpackFS $ srcSpanFile sp
             sl = srcSpanStartLine sp
             sc = srcSpanStartCol sp
             el = srcSpanEndLine sp
@@ -184,12 +182,11 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
       , info <- identInfo dets
       , Just sp <- getBindSpan info
       , is_root <- isRoot info
-      , file <- FS.unpackFS $ srcSpanFile sp
       , sl   <- srcSpanStartLine sp
       , sc   <- srcSpanStartCol sp
       , el   <- srcSpanEndLine sp
       , ec   <- srcSpanEndCol sp
-      = Just $ DeclRow path occ file sl sc el ec is_root
+      = Just $ DeclRow path occ sl sc el ec is_root
     goDec _ = Nothing
 
     isRoot = any (\case
@@ -225,12 +222,11 @@ genDefRow path smod refmap = genRows $ M.toList refmap
       , mod == smod
       , occ  <- nameOccName name
       , Just sp <- getSpan name dets
-      , file <- FS.unpackFS $ srcSpanFile sp
       , sl   <- srcSpanStartLine sp
       , sc   <- srcSpanStartCol sp
       , el   <- srcSpanEndLine sp
       , ec   <- srcSpanEndCol sp
-      = Just $ DefRow path occ file sl sc el ec
+      = Just $ DefRow path occ sl sc el ec
     go _ = Nothing
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )

@@ -126,7 +126,6 @@ data RefRow
   , refNameOcc :: OccName
   , refNameMod :: ModuleName
   , refNameUnit :: UnitId
-  , refFile :: FilePath
   , refSLine :: Int
   , refSCol :: Int
   , refELine :: Int
@@ -134,18 +133,17 @@ data RefRow
   }
 
 instance ToRow RefRow where
-  toRow (RefRow a b c d e f g h i) = toRow ((a,b,c):.(d,e,f):.(g,h,i))
+  toRow (RefRow a b c d e f g h) = toRow ((a,b,c):.(d,e,f):.(g,h))
 
 instance FromRow RefRow where
   fromRow = RefRow <$> field <*> field <*> field
                    <*> field <*> field <*> field
-                   <*> field <*> field <*> field
+                   <*> field <*> field
 
 data DeclRow
   = DeclRow
   { declSrc :: FilePath
   , declNameOcc :: OccName
-  , declFile :: FilePath
   , declSLine :: Int
   , declSCol :: Int
   , declELine :: Int
@@ -154,11 +152,11 @@ data DeclRow
   }
 
 instance ToRow DeclRow where
-  toRow (DeclRow a b c d e f g h) = toRow ((a,b,c,d):.(e,f,g,h))
+  toRow (DeclRow a b c d e f g) = toRow ((a,b,c,d):.(e,f,g))
 
 instance FromRow DeclRow where
   fromRow = DeclRow <$> field <*> field <*> field <*> field
-                    <*> field <*> field <*> field <*> field
+                    <*> field <*> field <*> field
 
 data TypeName = TypeName
   { typeName :: OccName
@@ -170,7 +168,6 @@ data TypeRef = TypeRef
   { typeRefOccId :: Int64
   , typeRefHieFile :: FilePath
   , typeRefDepth :: Int
-  , typeRefFile :: FilePath
   , typeRefSLine :: Int
   , typeRefSCol :: Int
   , typeRefELine :: Int
@@ -178,17 +175,16 @@ data TypeRef = TypeRef
   }
 
 instance ToRow TypeRef where
-  toRow (TypeRef a b c d e f g h) = toRow ((a,b,c,d):.(e,f,g,h))
+  toRow (TypeRef a b c d e f g) = toRow ((a,b,c,d):.(e,f,g))
 
 instance FromRow TypeRef where
   fromRow = TypeRef <$> field <*> field <*> field <*> field
-                    <*> field <*> field <*> field <*> field
+                    <*> field <*> field <*> field
 
 data DefRow
   = DefRow
   { defSrc :: FilePath
   , defNameOcc :: OccName
-  , defFile :: FilePath
   , defSLine :: Int
   , defSCol :: Int
   , defELine :: Int
@@ -196,11 +192,11 @@ data DefRow
   }
 
 instance ToRow DefRow where
-  toRow (DefRow a b c d e f g) = toRow ((a,b,c,d):.(e,f,g))
+  toRow (DefRow a b c d e f) = toRow ((a,b,c,d):.(e,f))
 
 instance FromRow DefRow where
   fromRow = DefRow <$> field <*> field <*> field <*> field
-                   <*> field <*> field <*> field
+                   <*> field <*> field
 
 
 {-| Monad with access to 'NameCacheUpdater', which is needed to deserialize .hie files -}
