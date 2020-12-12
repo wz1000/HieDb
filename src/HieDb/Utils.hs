@@ -82,7 +82,7 @@ makeNc = do
   uniq_supply <- mkSplitUniqSupply 'z'
   return $ initNameCache uniq_supply []
 
--- | Recursively search for .hie and .hie-boot files in given directory
+-- | Recursively search for @.hie@ and @.hie-boot@  files in given directory
 getHieFilesIn :: FilePath -> IO [FilePath]
 getHieFilesIn path = do
   isFile <- doesFileExist path
@@ -106,14 +106,6 @@ withHieFile path act = do
   hiefile <- liftIO $ readHieFile ncu path
   act (hie_file_result hiefile)
 
-tryAll :: Monad m => (a -> m (Either b c)) -> [a] -> m (Maybe c)
-tryAll _ [] = return Nothing
-tryAll f (x:xs) = do
-  eres <- f x
-  case eres of
-    Right res -> return (Just res)
-    Left _ -> tryAll f xs
-
 -- | Given the path to a HieFile, it tries to find the SrcSpan of an External name in
 -- it by loading it and then looking for the name in NameCache
 findDefInFile :: OccName -> Module -> FilePath -> IO (Either HieDbErr (RealSrcSpan,Module))
@@ -129,7 +121,7 @@ findDefInFile occ mdl file = do
 
 pointCommand :: HieFile -> (Int, Int) -> Maybe (Int, Int) -> (HieAST TypeIndex -> a) -> [a]
 pointCommand hf (sl,sc) mep k =
-    catMaybes $ M.elems $ flip M.mapWithKey (getAsts $ hie_asts hf) $ \fs ast ->
+    M.elems $ flip M.mapMaybeWithKey (getAsts $ hie_asts hf) $ \fs ast ->
       k <$> selectSmallestContaining (sp fs) ast
  where
    sloc fs = mkRealSrcLoc fs sl sc
