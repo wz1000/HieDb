@@ -17,18 +17,27 @@ source-repository head
   type: git
   location: https://github.com/wz1000/HieDb
 
+common common-options
+  default-language:    Haskell2010
+  build-depends:       base >= 4.12 && < 4.15
+  ghc-options:         -Wall
+                       -Wincomplete-uni-patterns
+                       -Wincomplete-record-updates
+                       -Wcompat
+                       -Widentities
+                       -Wredundant-constraints
+                       -Wpartial-fields
+                       -Wno-unrecognised-pragmas
 executable hiedb
+  import:              common-options
   hs-source-dirs:      exe
   main-is:             Main.hs
-  -- other-modules:
-  -- other-extensions:
   build-depends:       base
                      , hiedb
                      , ghc-paths
-  ghc-options:         -Wall
-  default-language:    Haskell2010
 
 library
+  import:              common-options
   hs-source-dirs:      src
   exposed-modules:     HieDb,
                        HieDb.Utils,
@@ -38,8 +47,7 @@ library
                        HieDb.Dump,
                        HieDb.Html,
                        HieDb.Run
-  build-depends:       base >= 4.12 && < 4.15
-                     , ghc >= 8.6
+  build-depends:       ghc >= 8.6
                      , array
                      , containers
                      , filepath
@@ -54,22 +62,18 @@ library
                      , lucid
                      , optparse-applicative
                      , terminal-size
-  hs-source-dirs:      src
-  default-language:    Haskell2010
-  ghc-options:         -Wall
 
 test-suite hiedb-tests
-    type:               exitcode-stdio-1.0
-    hs-source-dirs:     test
-    main-is:            Main.hs
-    other-modules:      Test.Orphans
-    build-tool-depends: hiedb:hiedb
-    build-depends:      base >= 4.12 && < 4.15
-                      , directory
-                      , filepath
-                      , ghc >= 8.6
-                      , ghc-paths
-                      , hiedb
-                      , hspec
-                      , process
-    default-language:   Haskell2010
+  import:             common-options
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            Main.hs
+  other-modules:      Test.Orphans
+  build-tool-depends: hiedb:hiedb
+  build-depends:      directory
+                    , filepath
+                    , ghc >= 8.6
+                    , ghc-paths
+                    , hiedb
+                    , hspec
+                    , process

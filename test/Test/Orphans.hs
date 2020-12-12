@@ -1,4 +1,5 @@
 {-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.Orphans where
 
 import HieDb.Types
@@ -11,9 +12,9 @@ instance Show OccName where show = occNameString
 instance Show Name where
   show n =
     let occ = nameOccName n
-        mod = nameModule n
-        mn = moduleName mod
-        uid = moduleUnitId mod
+        mod' = nameModule n
+        mn = moduleName mod'
+        uid = moduleUnitId mod'
     in show uid <> ":" <> show mn <> ":" <> show occ
 
 deriving instance Show HieDbErr

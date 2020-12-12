@@ -198,13 +198,12 @@ progress l total cur act f = do
   return x
 
 runCommand :: LibDir -> Options -> Command -> IO ()
-runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
+runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlags conn -> do
   when (trace opts) $
     setHieTrace conn (Just $ T.hPutStrLn stderr . ("\n****TRACE: "<>))
-  go conn c
-  where
-    go conn Init = initConn conn
-    go conn (Index dirs) = do
+  case cmd of
+    Init -> initConn conn
+    Index dirs -> do
       initConn conn
       files <- concat <$> mapM getHieFilesIn dirs
       nc <- newIORef =<< makeNc
@@ -214,28 +213,28 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
         zipWithM_ (\f n -> progress' wsize (length files) n (addRefsFrom conn) f) files [0..]
       unless (quiet opts) $
         putStrLn "\nCompleted!"
-    go conn (TypeRefs typ mn muid) = do
+    TypeRefs typ mn muid -> do
       let occ = mkOccName tcClsName typ
       refs <- search conn False occ mn muid []
       reportRefs refs
-    go conn (NameRefs nm mn muid) = do
+    NameRefs nm mn muid -> do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
       refs <- search conn False occ mn muid []
       reportRefs refs
-    go conn (NameDef nm mn muid) = do
+    NameDef nm mn muid -> do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
       (row:.inf) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
       let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
       reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
-    go conn (TypeDef nm mn muid) = do
+    TypeDef nm mn muid -> do
       let occ = mkOccName tcClsName nm
       (row:.inf) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
       let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
       reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
-    go conn (Cat target) = hieFileCommand conn target (BS.putStrLn . hie_hs_src)
-    go conn Ls = do
+    Cat target -> hieFileCommand conn target (BS.putStrLn . hie_hs_src)
+    Ls -> do
       mods <- getAllIndexedMods conn
       forM_ mods $ \mod -> do
         putStr $ hieModuleHieFile mod
@@ -243,7 +242,7 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
         putStr $ moduleNameString $ modInfoName $ hieModInfo mod
         putStr "\t"
         putStrLn $ unitIdString $ modInfoUnit $ hieModInfo mod
-    go conn (Rm targets) = do
+    Rm targets -> do
         forM_ targets $ \target -> do
           case target of
             Left f -> do
@@ -261,9 +260,9 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
               case mFile of
                 Nothing -> reportAmbiguousErr $ Left (NotIndexed mn $ Just uid)
                 Just x -> deleteFileFromIndex conn (hieModuleHieFile x)
-    go conn (ModuleUIDs mn) =
+    ModuleUIDs mn ->
       print =<< reportAmbiguousErr =<< resolveUnitId conn mn
-    go conn (LookupHieFile mn muid) = reportAmbiguousErr =<< do
+    LookupHieFile mn muid -> reportAmbiguousErr =<< do
       euid <- maybe (resolveUnitId conn mn) (return . Right) muid
       case euid of
         Left err -> return $ Left err
@@ -272,7 +271,7 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
           case mFile of
             Nothing -> return $ Left (NotIndexed mn $ Just uid)
             Just x -> Right <$> putStrLn (hieModuleHieFile x)
-    go conn (RefsAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
+    RefsAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
       let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
       forM_ names $ \name -> do
         putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is used in:"]
@@ -286,13 +285,12 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
                               (srcSpanStartLine spn , srcSpanStartCol spn),
                               (srcSpanEndLine spn , srcSpanEndCol spn))
             reportRefSpans refs
-    go conn (TypesAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
+    TypesAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
       let types' = concat $ pointCommand hf sp mep $ nodeType . nodeInfo
           types = map (flip recoverFullType $ hie_types hf) types'
-      let Just dynFlags = getDbDynFlags conn
       forM_ types $ \typ -> do
         putStrLn $ renderHieType dynFlags typ
-    go conn (DefsAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
+    DefsAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
       let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
       forM_ names $ \name -> do
         case nameSrcSpan name of
@@ -312,19 +310,16 @@ runCommand libdir opts c = withHieDb' libdir (database opts) $ \conn -> do
                                 ,(defELine row,defECol row))]
               Nothing -> do
                 reportAmbiguousErr $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
-    go conn (InfoAtPoint target sp mep) = hieFileCommand conn target $ \hf -> do
-      let Just dynFlags = getDbDynFlags conn
+    InfoAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
         (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
-    go conn RefGraph =
-      declRefs conn
-    go conn (Dump path) = do
-      let Just dynFlags = getDbDynFlags conn
+    RefGraph -> declRefs conn
+    Dump path -> do
       nc <- newIORef =<< makeNc
       runDbM nc $ dump dynFlags path
-    go conn (Reachable s) = getReachable conn s >>= mapM_ print
-    go conn (Unreachable s) = getUnreachable conn s >>= mapM_ print
-    go conn (Html s) = do
+    Reachable s -> getReachable conn s >>= mapM_ print
+    Unreachable s -> getUnreachable conn s >>= mapM_ print
+    Html s -> do
       nc <- newIORef =<< makeNc
       runDbM nc $ html conn s
 
