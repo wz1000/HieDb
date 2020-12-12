@@ -33,7 +33,7 @@ import qualified Data.Map as M
 import Data.Maybe
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 3
+sCHEMA_VERSION = 4
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
@@ -88,7 +88,6 @@ initConn (getConn -> conn) = do
                 \, occ     TEXT NOT NULL \
                 \, mod     TEXT NOT NULL \
                 \, unit    TEXT NOT NULL \
-                \, file    TEXT NOT NULL \
                 \, sl   INTEGER NOT NULL \
                 \, sc   INTEGER NOT NULL \
                 \, el   INTEGER NOT NULL \
@@ -99,7 +98,6 @@ initConn (getConn -> conn) = do
   execute_ conn "CREATE TABLE IF NOT EXISTS decls \
                 \( hieFile    TEXT NOT NULL \
                 \, occ        TEXT NOT NULL \
-                \, file       TEXT NOT NULL \
                 \, sl      INTEGER NOT NULL \
                 \, sc      INTEGER NOT NULL \
                 \, el      INTEGER NOT NULL \
@@ -111,7 +109,6 @@ initConn (getConn -> conn) = do
   execute_ conn "CREATE TABLE IF NOT EXISTS defs \
                 \( hieFile    TEXT NOT NULL \
                 \, occ        TEXT NOT NULL \
-                \, file       TEXT NOT NULL \
                 \, sl      INTEGER NOT NULL \
                 \, sc      INTEGER NOT NULL \
                 \, el      INTEGER NOT NULL \
@@ -132,7 +129,6 @@ initConn (getConn -> conn) = do
                 \( id   INTEGER NOT NULL \
                 \, hieFile    TEXT NOT NULL \
                 \, depth   INTEGER NOT NULL \
-                \, file       TEXT NOT NULL \
                 \, sl      INTEGER NOT NULL \
                 \, sc      INTEGER NOT NULL \
                 \, el      INTEGER NOT NULL \
@@ -198,13 +194,13 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf = lift
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
   let (rows,decls) = genRefsAndDecls path smod refmap
-  executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?,?)" rows
-  executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?,?)" decls
+  executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
+  executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?)" decls
 
   ixs <- addArr db (hie_types hf)
 
   let defs = genDefRow path smod refmap
-  executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?,?)" defs
+  executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" defs
 
   when isReal $
     addTypeRefs db path hf ixs
