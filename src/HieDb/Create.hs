@@ -53,12 +53,12 @@ checkVersion k db@(getConn -> conn) = do
   else
     throwIO $ IncompatibleSchemaVersion dB_VERSION ver
 
-{-| Given path to .hiedb file, constructs 'HieDb' and passes it to given function. -}
+{-| Given path to @.hiedb@ file, constructs 'HieDb' and passes it to given function. -}
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
 withHieDb fp f = withConnection fp (checkVersion f . HieDb)
 
-{-| Given GHC LibDir and path to ".hiedb" file, 
-constructs DynFlags (required for printing info from .hie files)
+{-| Given GHC LibDir and path to @.hiedb@ file, 
+constructs DynFlags (required for printing info from @.hie@ files)
 and 'HieDb' and passes them to given function.
 -}
 withHieDbAndFlags :: LibDir -> FilePath -> (DynFlags -> HieDb -> IO a) -> IO a
@@ -139,6 +139,10 @@ initConn (getConn -> conn) = do
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
 
+{-| Add names of types from @.hie@ file to 'HieDb'.
+Returns an Array mapping 'TypeIndex' to database ID assigned to the 
+corresponding record in DB.
+-}
 addArr :: HieDb -> A.Array TypeIndex HieTypeFlat -> IO (A.Array TypeIndex (Maybe Int64))
 addArr (getConn -> conn) arr = do
   forM arr $ \case
@@ -149,14 +153,20 @@ addArr (getConn -> conn) arr = do
     addName :: Name -> IO (Maybe Int64)
     addName n = case nameModule_maybe n of
       Nothing -> pure Nothing
-      Just m -> liftIO $ do
+      Just m -> do
         let occ = nameOccName n
             mod = moduleName m
             uid = moduleUnitId m
         execute conn "INSERT INTO typenames(name,mod,unit) VALUES (?,?,?)" (occ,mod,uid)
         Just . fromOnly . head <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
 
-addTypeRefs :: HieDb -> FilePath -> HieFile -> A.Array TypeIndex (Maybe Int64) -> IO ()
+{-| Add references to types from given @.hie@ file to DB. -}
+addTypeRefs
+  :: HieDb
+  -> FilePath -- ^ Path to @.hie@ file
+  -> HieFile -- ^ Data loaded from the @.hie@ file
+  -> A.Array TypeIndex (Maybe Int64) -- ^ Maps TypeIndex to database ID assigned to record in @typenames@ table
+  -> IO ()
 addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
   where
     arr = hie_types hf
@@ -168,26 +178,34 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
         mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ nodeType $ nodeInfo ast
       mapM_ addTypesFromAst $ nodeChildren ast
 
-{-| Adds all references from given .hie file to 'HieDb'.
+{-| Adds all references from given @.hie@ file to 'HieDb'.
 The indexing is skipped if the file was not modified since the last time it was indexed.
 -}
 addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m ()
 addRefsFrom c@(getConn -> conn) path = do
   time <- liftIO $ getModificationTime path
   mods <- liftIO $ query conn "SELECT * FROM mods WHERE hieFile = ? AND time >= ?" (path, time)
-  let isBoot = "boot" `isSuffixOf` path
   case mods of
     (HieModuleRow{}:_) -> return ()
-    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path isBoot Nothing False time hf
+    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path Nothing False time hf
 
-addRefsFromLoaded :: (MonadIO m) => HieDb -> FilePath -> Bool -> Maybe FilePath -> Bool -> UTCTime -> HieFile -> m ()
-addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf = liftIO $ withTransaction conn $ do
+addRefsFromLoaded
+  :: MonadIO m
+  => HieDb -- ^ HieDb into which we're adding the file
+  -> FilePath -- ^ Path to @.hie@ file
+  -> Maybe FilePath -- ^ Path to .hs file from which @.hie@ file was created
+  -> Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
+  -> UTCTime -- ^ The last modification time of the @.hie@ file
+  -> HieFile -- ^ Data loaded from the @.hie@ file
+  -> m ()
+addRefsFromLoaded db@(getConn -> conn) path srcFile isReal time hf = liftIO $ withTransaction conn $ do
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM typerefs WHERE hieFile = ?" (Only path)
 
-  let mod    = moduleName smod
+  let isBoot = "boot" `isSuffixOf` path
+      mod    = moduleName smod
       uid    = moduleUnitId smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
@@ -207,19 +225,19 @@ addRefsFromLoaded db@(getConn -> conn) path isBoot srcFile isReal time hf = lift
   when isReal $
     addTypeRefs db path hf ixs
 
-{-| Add path to .hs source given path to .hie file which has already been indexed.
-No action is taken if the corresponding .hie file has not been indexed yet.
+{-| Add path to .hs source given path to @.hie@ file which has already been indexed.
+No action is taken if the corresponding @.hie@ file has not been indexed yet.
 -}
 addSrcFile
   :: HieDb 
-  -> FilePath -- ^ Absolute path to .hie file
+  -> FilePath -- ^ Path to @.hie@ file
   -> FilePath -- ^ Path to .hs file to be added to DB
   -> Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
   -> IO ()
 addSrcFile (getConn -> conn) hie srcFile isReal =
   execute conn "UPDATE mods SET hs_src = ? , is_real = ? WHERE hieFile = ?" (srcFile, isReal, hie)
 
-{-| Delete all occurrence of given .hie file from the database -}
+{-| Delete all occurrences of given @.hie@ file from the database -}
 deleteFileFromIndex :: HieDb -> FilePath -> IO ()
 deleteFileFromIndex (getConn -> conn) path = withTransaction conn $ do
   execute conn "DELETE FROM mods  WHERE hieFile = ?" (Only path)
