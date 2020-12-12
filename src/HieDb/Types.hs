@@ -13,7 +13,7 @@ import Prelude hiding (mod)
 import Name
 import Module
 import NameCache
-import DynFlags
+
 import IfaceEnv (NameCacheUpdater(..))
 import Data.IORef
 
@@ -34,7 +34,7 @@ import Database.SQLite.Simple.FromField
 
 import qualified Text.ParserCombinators.ReadP as R
 
-data HieDb = HieDb { getConn :: Connection, getDbDynFlags :: Maybe DynFlags }
+newtype HieDb = HieDb { getConn :: Connection }
 
 data HieDbException
   = IncompatibleSchemaVersion
@@ -44,7 +44,7 @@ data HieDbException
 instance Exception HieDbException where
 
 setHieTrace :: HieDb -> Maybe (T.Text -> IO ()) -> IO ()
-setHieTrace (getConn -> conn) = setTrace conn
+setHieTrace = setTrace . getConn
 
 data ModuleInfo
   = ModuleInfo

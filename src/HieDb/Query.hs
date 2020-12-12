@@ -158,9 +158,10 @@ declRefs db = do
     "refs.dot"
     ( export
         ( ( defaultStyle ( \( _, hie, occ, _, _, _, _ ) -> hie <> ":" <> occ ) )
-          { vertexAttributes = \( mod', _, v : occ, _, _, _, _ ) ->
-              [ "label" G.:= ( mod' <> "." <> occ )
-              , "fillcolor" G.:= case v of 'v' -> "red"; 't' -> "blue" ; _ -> "black" ]
+          { vertexAttributes = \( mod', _, occ, _, _, _, _ ) ->
+              [ "label" G.:= ( mod' <> "." <> drop 1 occ )
+              , "fillcolor" G.:= case occ of ('v':_) -> "red"; ('t':_) -> "blue";_ -> "black"
+              ]
           }
         )
         graph

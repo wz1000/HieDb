@@ -1,7 +1,7 @@
 module Main where
 
 import GHC.Paths (libdir)
-import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb')
+import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb)
 import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId)
 import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..))
@@ -239,7 +239,7 @@ testTmp :: FilePath
 testTmp = "test" </> "tmp"
 
 withTestDb :: (HieDb -> IO a) -> IO a
-withTestDb = withHieDb' (LibDir libdir) testDb
+withTestDb = withHieDb testDb
 
 runCommandTest :: Command -> IO ()
 runCommandTest = runCommand (LibDir libdir) testOpts

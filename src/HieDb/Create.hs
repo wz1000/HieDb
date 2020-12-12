@@ -53,16 +53,18 @@ checkVersion k db@(getConn -> conn) = do
   else
     throwIO $ IncompatibleSchemaVersion dB_VERSION ver
 
+{-| Given path to .hiedb file, constructs 'HieDb' and passes it to given function. -}
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
-withHieDb fp f = withConnection fp (checkVersion f . flip HieDb Nothing)
+withHieDb fp f = withConnection fp (checkVersion f . HieDb)
 
-{-| Given GHC LibDir and path to ".hiedb" file,
- constructs a 'HieDb' and passes it to given function.
+{-| Given GHC LibDir and path to ".hiedb" file, 
+constructs DynFlags (required for printing info from .hie files)
+and 'HieDb' and passes them to given function.
 -}
-withHieDb' :: LibDir -> FilePath -> (HieDb -> IO a) -> IO a
-withHieDb' libdir fp f = do
-  df <- dynFlagsForPrinting libdir
-  withConnection fp (checkVersion f . flip HieDb (Just df))
+withHieDbAndFlags :: LibDir -> FilePath -> (DynFlags -> HieDb -> IO a) -> IO a
+withHieDbAndFlags libdir fp f = do
+  dynFlags <- dynFlagsForPrinting libdir
+  withConnection fp (checkVersion (f dynFlags) . HieDb)
 
 {-| Initialize database schema for given 'HieDb'.
 -}
