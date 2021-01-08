@@ -48,7 +48,7 @@ or if ModuleName is ambiguous (i.e. there are multiple packages containing modul
 -}
 resolveUnitId :: HieDb -> ModuleName -> IO (Either HieDbErr UnitId)
 resolveUnitId (getConn -> conn) mn = do
-  luid <- query conn "SELECT mod, unit, is_boot, hs_src, is_real, time FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
+  luid <- query conn "SELECT mod, unit, is_boot, hs_src, is_real, hash FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
   return $ case luid of
     [] ->  Left $ NotIndexed mn Nothing
     [x] -> Right $ modInfoUnit x
@@ -60,7 +60,7 @@ search (getConn -> conn) isReal occ mn uid exclude =
   where
     excludedFields = zipWith (\n f -> (":exclude" <> T.pack (show n)) := f) [1 :: Int ..] exclude
     thisQuery =
-      "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
+      "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
       \FROM refs JOIN mods USING (hieFile) \
       \WHERE refs.occ = :occ AND (:mod IS NULL OR refs.mod = :mod) AND (:unit is NULL OR refs.unit = :unit) AND ( (NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
       <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
@@ -91,7 +91,7 @@ lookupHieFileFromSource (getConn -> conn) fp = do
 
 findTypeRefs :: HieDb -> OccName -> ModuleName -> UnitId -> IO [Res TypeRef]
 findTypeRefs (getConn -> conn) occ mn uid
-  = query conn  "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
+  = query conn  "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
                 \FROM typerefs JOIN mods ON typerefs.hieFile = mods.hieFile \
                               \JOIN typenames ON typerefs.id = typenames.id \
                 \WHERE typenames.name = ? AND typenames.mod = ? AND typenames.unit = ? AND mods.is_real \
@@ -100,7 +100,7 @@ findTypeRefs (getConn -> conn) occ mn uid
 
 findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
 findDef conn occ mn uid
-  = queryNamed (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
+  = queryNamed (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
                               \FROM defs JOIN mods USING (hieFile) \
                               \WHERE occ = :occ AND (:mod IS NULL OR mod = :mod) AND (:unit IS NULL OR unit = :unit)"
                               [":occ" := occ,":mod" := mn, ":unit" := uid]
@@ -115,7 +115,7 @@ findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
 
 searchDef :: HieDb -> String -> IO [Res DefRow]
 searchDef conn cs
-  = query (getConn conn) "SELECT defs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.time \
+  = query (getConn conn) "SELECT defs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ LIKE ? \
                          \LIMIT 200" (Only $ '_':cs++"%")

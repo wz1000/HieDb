@@ -13,6 +13,7 @@ import Prelude hiding (mod)
 import Name
 import Module
 import NameCache
+import Fingerprint
 
 import IfaceEnv (NameCacheUpdater(..))
 import Data.IORef
@@ -25,7 +26,6 @@ import Control.Exception
 
 import Data.List.NonEmpty (NonEmpty(..))
 
-import Data.Time.Clock
 import Data.Int
 
 import Database.SQLite.Simple
@@ -54,7 +54,7 @@ data ModuleInfo
                           -- False when it was created from @.hie@ file
   , modInfoSrcFile :: Maybe FilePath -- ^ The path to the haskell source file, from which the @.hie@ file was created
   , modInfoIsReal :: Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
-  , modInfoTime :: UTCTime -- ^ The last modification time of the @.hie@ file from which this ModuleInfo was created
+  , modInfoHash :: Fingerprint -- ^ The hash of the @.hie@ file from which this ModuleInfo was created
   }
 
 instance Show ModuleInfo where
@@ -77,6 +77,11 @@ instance ToField UnitId where
   toField uid = SQLText $ T.pack $ unitIdString uid
 instance FromField UnitId where
   fromField fld = stringToUnitId . T.unpack <$> fromField fld
+
+instance ToField Fingerprint where
+  toField hash = SQLText $ T.pack $ show hash
+instance FromField Fingerprint where
+  fromField fld = readHexFingerprint . T.unpack <$> fromField fld
 
 toNsChar :: NameSpace -> Char
 toNsChar ns

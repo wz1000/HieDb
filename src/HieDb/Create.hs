@@ -18,13 +18,11 @@ import Control.Monad.IO.Class
 import Control.Monad
 import Control.Exception
 
-import System.Directory
-
 import Database.SQLite.Simple
-import Data.Time.Clock
 import Data.List ( isSuffixOf )
 import Data.String
 import Data.Int
+import GHC.Fingerprint
 
 import HieDb.Types
 import HieDb.Utils
@@ -33,7 +31,7 @@ import qualified Data.Map as M
 import Data.Maybe
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 4
+sCHEMA_VERSION = 5
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
@@ -81,7 +79,7 @@ initConn (getConn -> conn) = do
                 \, is_boot BOOL NOT NULL \
                 \, hs_src  TEXT UNIQUE ON CONFLICT REPLACE \
                 \, is_real BOOL NOT NULL \
-                \, time    TEXT NOT NULL \
+                \, hash    TEXT NOT NULL UNIQUE ON CONFLICT REPLACE \
                 \, CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE \
                 \)"
 
@@ -183,11 +181,11 @@ The indexing is skipped if the file was not modified since the last time it was 
 -}
 addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m ()
 addRefsFrom c@(getConn -> conn) path = do
-  time <- liftIO $ getModificationTime path
-  mods <- liftIO $ query conn "SELECT * FROM mods WHERE hieFile = ? AND time >= ?" (path, time)
+  hash <- liftIO $ getFileHash path
+  mods <- liftIO $ query conn "SELECT * FROM mods WHERE hieFile = ? AND hash = ?" (path, hash)
   case mods of
     (HieModuleRow{}:_) -> return ()
-    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path Nothing False time hf
+    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path Nothing False hash hf
 
 addRefsFromLoaded
   :: MonadIO m
@@ -195,10 +193,10 @@ addRefsFromLoaded
   -> FilePath -- ^ Path to @.hie@ file
   -> Maybe FilePath -- ^ Path to .hs file from which @.hie@ file was created
   -> Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
-  -> UTCTime -- ^ The last modification time of the @.hie@ file
+  -> Fingerprint -- ^ The hash of the @.hie@ file
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> m ()
-addRefsFromLoaded db@(getConn -> conn) path srcFile isReal time hf = liftIO $ withTransaction conn $ do
+addRefsFromLoaded db@(getConn -> conn) path srcFile isReal hash hf = liftIO $ withTransaction conn $ do
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
@@ -209,7 +207,7 @@ addRefsFromLoaded db@(getConn -> conn) path srcFile isReal time hf = liftIO $ wi
       uid    = moduleUnitId smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
-      modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile isReal time)
+      modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile isReal hash)
 
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 

@@ -23,6 +23,7 @@ import System.Environment
 import System.Directory
 import System.IO
 import System.Exit
+import System.Time.Extra
 
 import System.Console.Terminal.Size
 
@@ -187,11 +188,15 @@ hieTarget =
       (Left <$> strOption (long "hiefile" <> short 'f' <> metavar "HIEFILE"))
   <|> (Right <$> ((,) <$> moduleNameParser  <*> maybeUnitId))
 
-progress :: Int -> Int -> Int -> (FilePath -> DbMonad a) -> FilePath -> DbMonad a
-progress l total cur act f = do
-  liftIO $ putStr $ replicate l ' '
-  liftIO $ putStr "\r"
-  let msg = take (l-8) $ unwords ["Processing file", show (cur + 1) ++ "/" ++ show total ++ ":", f] ++ "..."
+progress :: Maybe Int -> Int -> Int -> (FilePath -> DbMonad a) -> FilePath -> DbMonad a
+progress mw total cur act f = do
+  let msg' = unwords ["Processing file", show (cur + 1) ++ "/" ++ show total ++ ":", f] ++ "..."
+  msg <- liftIO $ case mw of
+    Nothing -> putStrLn "" >> pure msg'
+    Just w -> do
+      putStr $ replicate w ' '
+      putStr "\r"
+      pure $ take (w-8) $ msg'
   liftIO $ putStr msg
   x <- act f
   liftIO $ putStr " done\r"
@@ -207,12 +212,14 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
       initConn conn
       files <- concat <$> mapM getHieFilesIn dirs
       nc <- newIORef =<< makeNc
-      wsize <- maybe 80 width <$> size
+      wsize <- fmap width <$> size
       let progress' = if quiet opts then (\_ _ _ k -> k) else progress
+      start <- offsetTime
       runDbM nc $
         zipWithM_ (\f n -> progress' wsize (length files) n (addRefsFrom conn) f) files [0..]
+      end <- start
       unless (quiet opts) $
-        putStrLn "\nCompleted!"
+        putStrLn $ "\nCompleted! (" <> showDuration end <> ")"
     TypeRefs typ mn muid -> do
       let occ = mkOccName tcClsName typ
       refs <- search conn False occ mn muid []

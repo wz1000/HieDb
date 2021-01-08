@@ -47,6 +47,9 @@ import Data.IORef
 import HieDb.Types
 import Database.SQLite.Simple
 
+maxDepth :: Int
+maxDepth = 2
+
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
   where
@@ -55,7 +58,9 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
     el = srcSpanEndLine sp
     ec = srcSpanEndCol sp
     go :: TypeIndex -> Int -> IO ()
-    go d i = do
+    go d i
+      | d > maxDepth = pure ()
+      | otherwise = do
       case ixs A.! i of
         Nothing -> pure ()
         Just occ -> do
@@ -74,7 +79,7 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
         HFunTy a b -> mapM_ next [a,b]
         HQualTy a b -> mapM_ next [a,b]
         HLitTy _ -> pure ()
-        HCastTy a -> next a
+        HCastTy a -> go d a
         HCoercionTy -> pure ()
 
 makeNc :: IO NameCache
