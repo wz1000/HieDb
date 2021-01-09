@@ -171,9 +171,11 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
     asts = getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
-      mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ mapMaybe identType $ M.elems $ nodeIdentifiers $ nodeInfo ast
-      when (null $ nodeChildren ast) $
-        mapM_ (addTypeRef db path arr ixs (nodeSpan ast)) $ nodeType $ nodeInfo ast
+      mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
+        $ mapMaybe (\x -> guard (any (not . isOccurrence) (identInfo x)) *> identType x)
+        $ M.elems
+        $ nodeIdentifiers
+        $ nodeInfo ast
       mapM_ addTypesFromAst $ nodeChildren ast
 
 {-| Adds all references from given @.hie@ file to 'HieDb'.
@@ -215,13 +217,11 @@ addRefsFromLoaded db@(getConn -> conn) path srcFile isReal hash hf = liftIO $ wi
   executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
   executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?)" decls
 
-  ixs <- addArr db (hie_types hf)
-
   let defs = genDefRow path smod refmap
   executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" defs
 
-  when isReal $
-    addTypeRefs db path hf ixs
+  ixs <- addArr db (hie_types hf)
+  addTypeRefs db path hf ixs
 
 {-| Add path to .hs source given path to @.hie@ file which has already been indexed.
 No action is taken if the corresponding @.hie@ file has not been indexed yet.

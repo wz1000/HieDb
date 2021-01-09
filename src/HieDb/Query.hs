@@ -35,7 +35,6 @@ import Database.SQLite.Simple
 import           HieDb.Dump (sourceCode)
 import           HieDb.Types
 import           HieDb.Utils
-import           HieDb.Create
 import qualified HieDb.Html as Html
 
 {-| List all modules indexed in HieDb. -}
@@ -54,15 +53,16 @@ resolveUnitId (getConn -> conn) mn = do
     [x] -> Right $ modInfoUnit x
     (x:xs) -> Left $ AmbiguousUnitId $ x :| xs
 
-search :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res RefRow]
-search (getConn -> conn) isReal occ mn uid exclude =
+findReferences :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res RefRow]
+findReferences (getConn -> conn) isReal occ mn uid exclude =
   queryNamed conn thisQuery ([":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal] ++ excludedFields)
   where
     excludedFields = zipWith (\n f -> (":exclude" <> T.pack (show n)) := f) [1 :: Int ..] exclude
     thisQuery =
       "SELECT refs.*,mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
       \FROM refs JOIN mods USING (hieFile) \
-      \WHERE refs.occ = :occ AND (:mod IS NULL OR refs.mod = :mod) AND (:unit is NULL OR refs.unit = :unit) AND ( (NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
+      \WHERE refs.occ = :occ AND (:mod IS NULL OR refs.mod = :mod) AND (:unit is NULL OR refs.unit = :unit) AND \
+            \((NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
       <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
 
 {-| Lookup 'HieModule' row from 'HieDb' given its 'ModuleName' and 'UnitId' -}
@@ -89,14 +89,19 @@ lookupHieFileFromSource (getConn -> conn) fp = do
             ++ show fp ++ ". Entries: "
             ++ intercalate ", " (map (show . toRow) xs)
 
-findTypeRefs :: HieDb -> OccName -> ModuleName -> UnitId -> IO [Res TypeRef]
-findTypeRefs (getConn -> conn) occ mn uid
-  = query conn  "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
-                \FROM typerefs JOIN mods ON typerefs.hieFile = mods.hieFile \
-                              \JOIN typenames ON typerefs.id = typenames.id \
-                \WHERE typenames.name = ? AND typenames.mod = ? AND typenames.unit = ? AND mods.is_real \
-                       \ORDER BY typerefs.depth ASC"
-                (occ,mn,uid)
+findTypeRefs :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res TypeRef]
+findTypeRefs (getConn -> conn) isReal occ mn uid exclude
+  = queryNamed conn thisQuery ([":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal] ++ excludedFields)
+  where
+    excludedFields = zipWith (\n f -> (":exclude" <> T.pack (show n)) := f) [1 :: Int ..] exclude
+    thisQuery =
+      "SELECT typerefs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
+      \FROM typerefs JOIN mods ON typerefs.hieFile = mods.hieFile \
+                    \JOIN typenames ON typerefs.id = typenames.id \
+      \WHERE typenames.name = :occ AND (:mod IS NULL OR typenames.mod = :mod) AND \
+            \(:unit IS NULL OR typenames.unit = :unit) AND ((NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
+      <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
+      <> " ORDER BY typerefs.depth ASC"
 
 findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
 findDef conn occ mn uid
@@ -145,7 +150,6 @@ withTarget conn target f = case target of
       fp' <- canonicalizePath fp
       nc <- newIORef =<< makeNc
       runDbM nc $ do
-        addRefsFrom conn fp'
         Right <$> withHieFile fp' (return . f)
   
 
