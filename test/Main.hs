@@ -111,17 +111,16 @@ cliSpec =
             ]
 
     describe "point-types" $ do
-      it "list references at point when there's Type" $
-        runHieDbCli ["point-refs", "Module1", "8", "21"]
+      it "Prints types of symbol under cursor" $
+        runHieDbCli ["point-types", "Module1", "10", "10" ]
           `suceedsWithStdin` unlines
-            [ "Name String at (8,21) is used in:"
-            , "Sub.Module2:6:19-6:25"
-            , "Module1:8:21-8:27"
+            [ "Int -> Bool" {- types of `even` function under cursor -}
+            , "forall a. Integral a => a -> Bool"
             ]
-      it "Give no output at point when there's not Type" $
-        runHieDbCli ["point-refs", "Module1", "7", "1"]
+      it "Gives no output for symbols that don't have type associated" $
+        runHieDbCli ["point-types", "Module1", "8", "21"]
           `suceedsWithStdin` ""
-
+        
     describe "point-defs" $ do
       it "outputs the location of symbol when definition site can be found is indexed" $
         runHieDbCli ["point-defs", "Module1", "13", "29"]
@@ -137,7 +136,7 @@ cliSpec =
         exitCode `shouldBe` ExitFailure 1
         actualStdout `shouldBe` "Couldn't find name: $ from module GHC.Base(base)\n"
 
-    describe "point-info" $
+    describe "point-info" $ do
       it "gives information about symbol at specified location" $
         runHieDbCli ["point-info", "Sub.Module2", "10", "10"]
           `suceedsWithStdin` unlines
@@ -148,6 +147,21 @@ cliSpec =
             , "Data1Constructor1 defined at test/data/Sub/Module2.hs:10:7-23"
             , "    IdentifierDetails Nothing {Decl ConDec (Just SrcSpanOneLine \"test/data/Sub/Module2.hs\" 10 7 24)}"
             , "Types:\n"
+            ]
+      it "correctly prints type signatures" $
+        runHieDbCli ["point-info", "Module1", "10", "10"]
+          `suceedsWithStdin` unlines
+            [ "Span: test/data/Module1.hs:10:8-11"
+            , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
+            , "Identifiers:"
+            , "Symbol:v:even:GHC.Real:base"
+            , "even defined at <no location info>"
+            , "    IdentifierDetails Just [f, o, r, a, l, l,  , a, .,  , I, n, t, e,"
+            , "                            g, r, a, l,  , a,  , =, >,  , a,  , -, >,  , B, o, o, l] {Use}"
+            , "Types:"
+            , "Int -> Bool"
+            , "forall a. Integral a => a -> Bool"
+            , ""
             ]
 
     describe "name-def" $
