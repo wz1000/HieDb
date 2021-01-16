@@ -11,6 +11,7 @@ import Compat.HieUtils
 import Name
 import Module
 import Outputable ((<+>),hang,showSDoc,ppr,text)
+import IfaceType (IfaceType)
 
 import qualified FastString as FS
 
@@ -319,7 +320,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
                 reportAmbiguousErr $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
     InfoAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
-        (renderHieType dynFlags . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
+        (hieTypeToIface . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
     RefGraph -> declRefs conn
     Dump path -> do
       nc <- newIORef =<< makeNc
@@ -330,7 +331,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
       nc <- newIORef =<< makeNc
       runDbM nc $ html conn s
 
-printInfo :: DynFlags -> NodeInfo String -> RealSrcSpan -> IO ()
+printInfo :: DynFlags -> NodeInfo IfaceType -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do
   putStrLn $ "Span: " ++ showSDoc dynFlags (ppr sp)
   putStrLn $ "Constructors: " ++ showSDoc dynFlags (ppr $ nodeAnnotations x)
@@ -350,7 +351,7 @@ printInfo dynFlags x sp = do
   putStrLn "Types:"
   let types = nodeType x
   forM_ types $ \typ -> do
-    putStrLn typ
+    putStrLn $ showSDoc dynFlags (ppr typ)
   putStrLn ""
 
 hieFileCommand :: HieDb -> HieTarget -> (HieFile -> IO a) -> IO a
