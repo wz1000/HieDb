@@ -153,8 +153,7 @@ cliSpec =
       it "list references at given point" $
         runHieDbCli ["point-refs", "Module1", "13", "2"]
           `suceedsWithStdin` unlines
-            [ "Name function2 at (13,2) is used in:"
-            , "Module1:3:7-3:16"
+            [ "Module1:3:7-3:16"
             , "Module1:12:1-12:10"
             , "Module1:13:1-13:10"
             ]
@@ -166,24 +165,29 @@ cliSpec =
             [ "Int -> Bool" {- types of `even` function under cursor -}
             , "forall a. Integral a => a -> Bool"
             ]
-      it "Gives no output for symbols that don't have type associated" $
-        runHieDbCli ["point-types", "Module1", "8", "21"]
-          `suceedsWithStdin` ""
+      it "Fails for symbols that don't have type associated" $ do
+        (exitCode, actualStdout, actualStderr) <- runHieDbCli ["point-types", "Module1", "8", "21"]
+        actualStdout `shouldBe` ""
+        exitCode `shouldBe` ExitFailure 1
+        actualStderr `shouldBe` "No symbols found at (8,21) in Module1\n"
         
     describe "point-defs" $ do
       it "outputs the location of symbol when definition site can be found is indexed" $
         runHieDbCli ["point-defs", "Module1", "13", "29"]
           `suceedsWithStdin` unlines
-            [ "Name showInt at (13,29) is defined at:"
-            , "Sub.Module2:7:1-7:8"
+            [ "Sub.Module2:7:1-7:8"
             ]
-      it "suceeds with no output when there's no symbol at given point" $
-        runHieDbCli ["point-defs", "Module1", "13", "13"]
-          `suceedsWithStdin` ""
-      it "fails with informative error message when the difinition can't be found" $ do
-        (exitCode, actualStdout, _) <- runHieDbCli ["point-defs", "Module1", "13", "24"]
+      it "Fails with informative error message when there's no symbol at given point" $ do
+        (exitCode, actualStdout, actualStderr) <- runHieDbCli ["point-defs", "Module1", "13", "13"]
+        actualStdout `shouldBe` ""
         exitCode `shouldBe` ExitFailure 1
-        actualStdout `shouldBe` "Couldn't find name: $ from module GHC.Base(base)\n"
+        actualStderr `shouldBe` "No symbols found at (13,13) in Module1\n"
+
+      it "fails with informative error message when the difinition can't be found" $ do
+        (exitCode, actualStdout, actualStderr) <- runHieDbCli ["point-defs", "Module1", "13", "24"]
+        actualStdout `shouldBe` ""
+        exitCode `shouldBe` ExitFailure 1
+        actualStderr `shouldBe` "Couldn't find name: $ from module GHC.Base(base)\n"
 
     describe "point-info" $ do
       it "gives information about symbol at specified location" $
@@ -256,9 +260,8 @@ cliSpec =
 
 suceedsWithStdin :: IO (ExitCode, String, String) -> String -> Expectation
 suceedsWithStdin action expectedStdin = do
-  (exitCode, actualStdin, actualStdErr) <- action
+  (exitCode, actualStdin, _actualStdErr) <- action
   exitCode `shouldBe` ExitSuccess
-  actualStdErr `shouldBe` ""
   actualStdin `shouldBe` expectedStdin
 
 
@@ -311,5 +314,8 @@ testOpts = Options
   { database = testDb
   , trace = False
   , quiet = True
-  , virtualFile = False
+  , colour = False
+  , context = Nothing
+  , reindex = False
+  , keepMissing = False
   }

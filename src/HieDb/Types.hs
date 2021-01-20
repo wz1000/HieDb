@@ -236,6 +236,7 @@ data HieDbErr
   = NotIndexed ModuleName (Maybe UnitId)
   | AmbiguousUnitId (NonEmpty ModuleInfo)
   | NameNotFound OccName (Maybe ModuleName) (Maybe UnitId)
+  | NoNameAtPoint HieTarget (Int,Int)
   | NameUnhelpfulSpan Name String
 
 data Symbol = Symbol

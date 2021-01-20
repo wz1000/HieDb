@@ -325,6 +325,8 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
             Just x -> Right <$> putStrLn (hieModuleHieFile x)
     RefsAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
+      when (null names) $
+        reportAmbiguousErr opts (Left $ NoNameAtPoint target sp)
       forM_ names $ \name -> do
         unless (quiet opts) $ do
           hPutStrLn stderr $ unwords ["Name", ppName opts (nameOccName name),"at",ppSpan opts sp,"is used at:"]
@@ -343,10 +345,14 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
     TypesAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       let types' = concat $ pointCommand hf sp mep $ nodeType . nodeInfo
           types = map (flip recoverFullType $ hie_types hf) types'
+      when (null types) $
+        reportAmbiguousErr opts (Left $ NoNameAtPoint target sp)
       forM_ types $ \typ -> do
         putStrLn $ renderHieType dynFlags typ
     DefsAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
+      when (null names) $
+        reportAmbiguousErr opts (Left $ NoNameAtPoint target sp)
       forM_ names $ \name -> do
         case nameSrcSpan name of
           RealSrcSpan dsp -> do
@@ -436,6 +442,7 @@ reportAmbiguousErr o (Left e) = do
 
 showHieDbErr :: Options -> HieDbErr -> String
 showHieDbErr opts e = case e of
+  NoNameAtPoint t spn -> unwords ["No symbols found at",ppSpan opts spn,"in",either id (\(mn,muid) -> ppMod opts mn ++ maybe "" (\uid -> "("++ppUnit opts uid++")") muid) t]
   NotIndexed mn muid -> unwords ["Module", ppMod opts mn ++ maybe "" (\uid -> "("++ppUnit opts uid++")") muid, "not indexed."]
   AmbiguousUnitId xs -> unlines $ "UnitId could be any of:" : map ((" - "<>) . unitIdString . modInfoUnit) (toList xs)
     <> ["Use --unit-id to disambiguate"]
