@@ -61,7 +61,7 @@ library
                      , lucid
                      , optparse-applicative
                      , extra
-                     , terminal-size
+                     , ansi-terminal
 
 test-suite hiedb-tests
   import:             common-options

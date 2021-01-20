@@ -142,6 +142,7 @@ initConn (getConn -> conn) = do
                 \, FOREIGN KEY(id) REFERENCES typenames(id) DEFERRABLE INITIALLY DEFERRED \
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS typeref_id ON typerefs(id)"
 
 {-| Add names of types from @.hie@ file to 'HieDb'.
 Returns an Array mapping 'TypeIndex' to database ID assigned to the 
@@ -186,14 +187,17 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
 
 {-| Adds all references from given @.hie@ file to 'HieDb'.
 The indexing is skipped if the file was not modified since the last time it was indexed.
+The boolean returned is true if the file was actually indexed
 -}
-addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m ()
+addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m Bool
 addRefsFrom c@(getConn -> conn) path = do
   hash <- liftIO $ getFileHash path
   mods <- liftIO $ query conn "SELECT * FROM mods WHERE hieFile = ? AND hash = ?" (path, hash)
   case mods of
-    (HieModuleRow{}:_) -> return ()
-    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path (FakeFile Nothing) hash hf
+    (HieModuleRow{}:_) -> pure False
+    [] -> do
+      withHieFile path $ addRefsFromLoaded c path (FakeFile Nothing) hash
+      pure True
 
 addRefsFromLoaded
   :: MonadIO m
@@ -246,8 +250,6 @@ addSrcFile (getConn -> conn) hie srcFile isReal =
 deleteFileFromIndex :: HieDb -> FilePath -> IO ()
 deleteFileFromIndex (getConn -> conn) path = withTransaction conn $ do
   deleteInternalTables conn path
-  execute_ conn "DELETE FROM typenames WHERE NOT EXISTS ( SELECT 1 FROM typerefs WHERE typerefs.id = typenames.id )"
-  execute conn "DELETE FROM mods  WHERE hieFile = ?" (Only path)
 
 {-| Delete all entries associated with modules for which the 'modInfoSrcFile' doesn't exist
 on the disk.
@@ -261,8 +263,14 @@ deleteMissingRealFiles (getConn -> conn) = withTransaction conn $ do
       pure $ if exists then acc else path : acc
   forM_ missing_file_keys $ \path -> do
     deleteInternalTables conn path
-    execute conn "DELETE FROM mods WHERE hieFile = ?" (Only path)
-  execute_ conn "DELETE FROM typenames WHERE NOT EXISTS ( SELECT 1 FROM typerefs WHERE typerefs.id = typenames.id )"
+
+{-| Garbage collect typenames with no references - it is a good idea to call
+this function after a sequence of database updates (inserts or deletes)
+-}
+garbageCollectTypeNames :: HieDb -> IO Int
+garbageCollectTypeNames (getConn -> conn) = do
+  execute_ conn "DELETE FROM typenames WHERE NOT EXISTS ( SELECT 1 FROM typerefs WHERE typerefs.id = typenames.id LIMIT 1 )"
+  changes conn
 
 deleteInternalTables :: Connection -> FilePath -> IO ()
 deleteInternalTables conn path = do
@@ -270,3 +278,4 @@ deleteInternalTables conn path = do
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM typerefs WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM mods  WHERE hieFile = ?" (Only path)

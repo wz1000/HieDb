@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 module HieDb.Run where
 
 import Prelude hiding (mod)
@@ -23,10 +25,11 @@ import qualified Data.Text.IO as T
 import System.Environment
 import System.Directory
 import System.IO
+import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Exit
 import System.Time.Extra
 
-import System.Console.Terminal.Size
+import System.Console.ANSI
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -35,6 +38,9 @@ import Data.Maybe
 import Data.Either
 import Data.Foldable
 import Data.IORef
+import Data.List.Extra
+
+import Numeric.Natural
 
 import qualified Data.ByteString.Char8 as BS
 
@@ -47,8 +53,9 @@ hiedbMain :: LibDir -> IO ()
 hiedbMain libdir = do
   defaultLoc <- getXdgDirectory XdgData $ "default_"++ show dB_VERSION ++".hiedb"
   defdb <- fromMaybe defaultLoc <$> lookupEnv "HIEDB"
+  colr <- hSupportsANSIColor stdout
   hSetBuffering stdout NoBuffering
-  (opts, cmd) <- execParser $ progParseInfo defdb
+  (opts, cmd) <- execParser $ progParseInfo defdb colr
   runCommand libdir opts cmd
 
 
@@ -68,7 +75,10 @@ data Options
   { database :: FilePath
   , trace :: Bool
   , quiet :: Bool
-  , virtualFile :: Bool
+  , colour :: Bool
+  , context :: Maybe Natural
+  , reindex :: Bool
+  , keepMissing :: Bool
   }
 
 data Command
@@ -92,30 +102,38 @@ data Command
   | Reachable [Symbol]
   | Unreachable [Symbol]
   | Html [Symbol]
+  | GCTypeNames
 
-progParseInfo :: FilePath -> ParserInfo (Options, Command)
-progParseInfo db = info (progParser db <**> helper)
+progParseInfo :: FilePath -> Bool -> ParserInfo (Options, Command)
+progParseInfo db colr = info (progParser db colr <**> helper)
   ( fullDesc
   <> progDesc "Query .hie files"
   <> header "hiedb - a tool to query groups of .hie files" )
 
-progParser :: FilePath -> Parser (Options,Command)
-progParser db = (,) <$> optParser db <*> cmdParser
+progParser :: FilePath -> Bool -> Parser (Options,Command)
+progParser db colr = (,) <$> optParser db colr <*> cmdParser
 
-optParser :: FilePath -> Parser Options
-optParser defdb
+optParser :: FilePath -> Bool -> Parser Options
+optParser defdb colr
     = Options
   <$> strOption (long "database" <> short 'D' <> metavar "DATABASE"
               <> value defdb <> showDefault <> help "References Database")
   <*> switch (long "trace" <> short 'v' <> help "Print SQL queries being executed")
   <*> switch (long "quiet" <> short 'q' <> help "Don't print progress messages")
-  <*> switch (long "virtual-file" <> short 'f' <> internal)
+  <*> colourFlag
+  <*> optional (option auto (long "context" <> short 'C' <> help "Number of lines of context for source spans - show no context by default"))
+  <*> switch (long "reindex" <> short 'r' <> help "Re-index all files in database before running command, deleting those with missing '.hie' files")
+  <*> switch (long "keep-missing" <> help "Keep missing files when re-indexing")
+  where
+    colourFlag = flag' True (long "colour" <> long "color" <> help "Force coloured output")
+            <|> flag' False (long "no-colour" <> long "no-color" <> help "Force uncoloured ouput")
+            <|> pure colr
 
 cmdParser :: Parser Command
 cmdParser
    = hsubparser
    $ command "init" (info (pure Init) $ progDesc "Initialize database")
-  <> command "index" (info (Index <$> many (strArgument (metavar "DIRECTORY..."))) $ progDesc "Index database")
+  <> command "index" (info (Index <$> many (strArgument (metavar "DIRECTORY..."))) $ progDesc "Index files from directory")
   <> command "name-refs" (info (NameRefs <$> strArgument (metavar "NAME")
                                          <*> optional (mkModuleName <$> strArgument (metavar "MODULE"))
                                          <*> maybeUnitId)
@@ -170,6 +188,7 @@ cmdParser
                            $ progDesc "Find all symbols unreachable from the given symbols")
   <> command "html" (info (Html <$> some symbolParser)
                     $ progDesc "generate html files for reachability from the given symbols")
+  <> command "gc" (info (pure GCTypeNames) mempty)
 
 posParser :: Char -> Parser (Int,Int)
 posParser c = (,) <$> argument auto (metavar $ c:"LINE") <*> argument auto (metavar $ c:"COL")
@@ -189,59 +208,84 @@ hieTarget =
       (Left <$> strOption (long "hiefile" <> short 'f' <> metavar "HIEFILE"))
   <|> (Right <$> ((,) <$> moduleNameParser  <*> maybeUnitId))
 
-progress :: Maybe Int -> Int -> Int -> (FilePath -> DbMonad a) -> FilePath -> DbMonad a
-progress mw total cur act f = do
+progress :: Handle -> Int -> Int -> (FilePath -> DbMonad Bool) -> FilePath -> DbMonad Bool
+progress hndl total cur act f = do
+  mw <- fmap snd <$> liftIO getTerminalSize
   let msg' = unwords ["Processing file", show (cur + 1) ++ "/" ++ show total ++ ":", f] ++ "..."
   msg <- liftIO $ case mw of
-    Nothing -> putStrLn "" >> pure msg'
+    Nothing -> hPutStrLn hndl "" >> pure msg'
     Just w -> do
-      putStr $ replicate w ' '
-      putStr "\r"
+      hPutStr hndl $ replicate w ' '
+      hPutStr hndl "\r"
       pure $ take (w-8) $ msg'
-  liftIO $ putStr msg
+  liftIO $ hPutStr hndl msg
   x <- act f
-  liftIO $ putStr " done\r"
+  if x
+  then liftIO $ hPutStr hndl " done\r"
+  else liftIO $ hPutStr hndl " skipped\r"
   return x
+
+doIndex :: HieDb -> Options -> Handle -> [FilePath] -> IO ()
+doIndex _ opts _ [] | reindex opts = pure ()
+doIndex conn opts h files = do
+  nc <- newIORef =<< makeNc
+  let progress' = if quiet opts then (\_ _ _ k -> k) else progress
+  start <- offsetTime
+  (length -> done, length -> skipped)<- runDbM nc $ partition id <$>
+    zipWithM (\f n -> progress' h (length files) n (addRefsFrom conn) f) files [0..]
+  when (done /= 0) $ void $ garbageCollectTypeNames conn
+
+  end <- start
+  unless (quiet opts) $
+    hPutStrLn h $ "\nCompleted! (" <> show done <> " indexed, " <> show skipped <> " skipped in " <> showDuration end <> ")"
 
 runCommand :: LibDir -> Options -> Command -> IO ()
 runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlags conn -> do
   when (trace opts) $
     setHieTrace conn (Just $ T.hPutStrLn stderr . ("\n****TRACE: "<>))
+  when (reindex opts) $ do
+    initConn conn
+    files' <- map hieModuleHieFile <$> getAllIndexedMods conn
+    files <- fmap catMaybes $ forM files' $ \f -> do
+      exists <- doesFileExist f
+      if exists
+      then pure $ Just f
+      else do
+        unless (keepMissing opts) $
+          deleteFileFromIndex conn f
+        pure Nothing
+    let n = length files
+        orig = length files'
+    unless (quiet opts) $
+      hPutStrLn stderr $ "Re-indexing " ++ show n ++ " files, deleting " ++ show (n-orig) ++ " files"
+    doIndex conn opts stderr files
   case cmd of
     Init -> initConn conn
     Index dirs -> do
       initConn conn
       files <- concat <$> mapM getHieFilesIn dirs
-      nc <- newIORef =<< makeNc
-      wsize <- fmap width <$> size
-      let progress' = if quiet opts then (\_ _ _ k -> k) else progress
-      start <- offsetTime
-      runDbM nc $
-        zipWithM_ (\f n -> progress' wsize (length files) n (addRefsFrom conn) f) files [0..]
-      end <- start
-      unless (quiet opts) $
-        putStrLn $ "\nCompleted! (" <> showDuration end <> ")"
+      doIndex conn opts stderr files
     TypeRefs typ mn muid -> do
       let occ = mkOccName tcClsName typ
       refs <- findReferences conn False occ mn muid []
-      reportRefs refs
+      reportRefs opts refs
     NameRefs nm mn muid -> do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
       refs <- findReferences conn False occ mn muid []
-      reportRefs refs
+      reportRefs opts refs
     NameDef nm mn muid -> do
       let ns = if isCons nm then dataName else varName
       let occ = mkOccName ns nm
-      (row:.inf) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      (row:.inf) <- reportAmbiguousErr opts =<< findOneDef conn occ mn muid
       let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
-      reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
+      reportRefSpans opts [(mdl, (defSLine row, defSCol row), (defELine row, defECol row),Just $ Left (defSrc row))]
     TypeDef nm mn muid -> do
       let occ = mkOccName tcClsName nm
-      (row:.inf) <- reportAmbiguousErr =<< findOneDef conn occ mn muid
+      (row:.inf) <- reportAmbiguousErr opts =<< findOneDef conn occ mn muid
       let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
-      reportRefSpans [(mdl, (defSLine row, defSCol row), (defELine row, defECol row))]
-    Cat target -> hieFileCommand conn target (BS.putStrLn . hie_hs_src)
+      reportRefSpans opts [(mdl, (defSLine row, defSCol row), (defELine row, defECol row),Just $ Left (defSrc row))]
+    Cat target -> hieFileCommand conn opts target (BS.putStrLn . hie_hs_src)
     Ls -> do
       mods <- getAllIndexedMods conn
       forM_ mods $ \mod -> do
@@ -263,14 +307,14 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
                 cf <- canonicalizePath f
                 deleteFileFromIndex conn cf
             Right (mn,muid) -> do
-              uid <- reportAmbiguousErr =<< maybe (resolveUnitId conn mn) (return . Right) muid
+              uid <- reportAmbiguousErr opts =<< maybe (resolveUnitId conn mn) (return . Right) muid
               mFile <- lookupHieFile conn mn uid
               case mFile of
-                Nothing -> reportAmbiguousErr $ Left (NotIndexed mn $ Just uid)
+                Nothing -> reportAmbiguousErr opts $ Left (NotIndexed mn $ Just uid)
                 Just x -> deleteFileFromIndex conn (hieModuleHieFile x)
     ModuleUIDs mn ->
-      print =<< reportAmbiguousErr =<< resolveUnitId conn mn
-    LookupHieFile mn muid -> reportAmbiguousErr =<< do
+      print =<< reportAmbiguousErr opts =<< resolveUnitId conn mn
+    LookupHieFile mn muid -> reportAmbiguousErr opts =<< do
       euid <- maybe (resolveUnitId conn mn) (return . Right) muid
       case euid of
         Left err -> return $ Left err
@@ -279,46 +323,67 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
           case mFile of
             Nothing -> return $ Left (NotIndexed mn $ Just uid)
             Just x -> Right <$> putStrLn (hieModuleHieFile x)
-    RefsAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
+    RefsAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
       forM_ names $ \name -> do
-        putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is used in:"]
+        unless (quiet opts) $ do
+          hPutStrLn stderr $ unwords ["Name", ppName opts (nameOccName name),"at",ppSpan opts sp,"is used at:"]
+          hPutStrLn stderr ""
         case nameModule_maybe name of
           Just mod -> do
-            reportRefs =<< findReferences conn False (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod) []
+            reportRefs opts =<< findReferences conn False (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod) []
           Nothing -> do
             let refmap = generateReferencesMap (getAsts $ hie_asts hf)
                 refs = map (toRef . fst) $ M.findWithDefault [] (Right name) refmap
-                toRef spn = (hie_module hf,
-                              (srcSpanStartLine spn , srcSpanStartCol spn),
-                              (srcSpanEndLine spn , srcSpanEndCol spn))
-            reportRefSpans refs
-    TypesAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
+                toRef spn = (hie_module hf
+                            ,(srcSpanStartLine spn , srcSpanStartCol spn)
+                            ,(srcSpanEndLine spn , srcSpanEndCol spn)
+                            ,Just $ Right (hie_hs_src hf))
+            reportRefSpans opts refs
+    TypesAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       let types' = concat $ pointCommand hf sp mep $ nodeType . nodeInfo
           types = map (flip recoverFullType $ hie_types hf) types'
       forM_ types $ \typ -> do
         putStrLn $ renderHieType dynFlags typ
-    DefsAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
+    DefsAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
       forM_ names $ \name -> do
         case nameSrcSpan name of
           RealSrcSpan dsp -> do
-            putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is defined at:"]
-            reportRefSpans [(fromMaybe (hie_module hf) (nameModule_maybe name)
-                            ,(srcSpanStartLine dsp,srcSpanStartCol dsp)
-                            ,(srcSpanEndLine dsp, srcSpanEndCol dsp))]
+            unless (quiet opts) $
+              hPutStrLn stderr $ unwords ["Name", ppName opts (nameOccName name),"at",ppSpan opts sp,"is defined at:"]
+            contents <- case nameModule_maybe name of
+              Nothing -> pure $ Just $ Right $ hie_hs_src hf
+              Just mod
+                | mod == hie_module hf -> pure $ Just $ Right $ hie_hs_src hf
+                | otherwise -> unsafeInterleaveIO $ do
+                    loc <- findOneDef conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
+                    pure $ case loc of
+                      Left _ -> Nothing
+                      Right (row:._) -> Just $ Left $ defSrc row
+
+            reportRefSpans opts
+              [(fromMaybe (hie_module hf) (nameModule_maybe name)
+               ,(srcSpanStartLine dsp,srcSpanStartCol dsp)
+               ,(srcSpanEndLine dsp, srcSpanEndCol dsp)
+               ,contents
+               )]
           UnhelpfulSpan msg -> do
             case nameModule_maybe name of
               Just mod -> do
-                (row:.inf) <- reportAmbiguousErr
+                (row:.inf) <- reportAmbiguousErr opts
                     =<< findOneDef conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
-                putStrLn $ unwords ["Name", occNameString (nameOccName name),"at",show sp,"is defined at:"]
-                reportRefSpans [(mkModule (modInfoUnit inf) (modInfoName inf)
-                                ,(defSLine row,defSCol row)
-                                ,(defELine row,defECol row))]
+                unless (quiet opts) $
+                  hPutStrLn stderr $ unwords ["Name", ppName opts (nameOccName name),"at",ppSpan opts sp,"is defined at:"]
+                reportRefSpans opts
+                  [(mkModule (modInfoUnit inf) (modInfoName inf)
+                   ,(defSLine row,defSCol row)
+                   ,(defELine row,defECol row)
+                   ,Just $ Left $ defSrc row
+                   )]
               Nothing -> do
-                reportAmbiguousErr $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
-    InfoAtPoint target sp mep -> hieFileCommand conn target $ \hf -> do
+                reportAmbiguousErr opts $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
+    InfoAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
         (hieTypeToIface . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
     RefGraph -> declRefs conn
@@ -330,6 +395,12 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
     Html s -> do
       nc <- newIORef =<< makeNc
       runDbM nc $ html conn s
+    GCTypeNames -> do
+      start <- offsetTime
+      n <- garbageCollectTypeNames conn
+      end <- start
+      unless (quiet opts) $
+        hPutStrLn stderr $ "GCed " ++ show n ++ " types in " <> showDuration end
 
 printInfo :: DynFlags -> NodeInfo IfaceType -> RealSrcSpan -> IO ()
 printInfo dynFlags x sp = do
@@ -354,38 +425,100 @@ printInfo dynFlags x sp = do
     putStrLn $ showSDoc dynFlags (ppr typ)
   putStrLn ""
 
-hieFileCommand :: HieDb -> HieTarget -> (HieFile -> IO a) -> IO a
-hieFileCommand conn target f = join $ reportAmbiguousErr =<< withTarget conn target f
+hieFileCommand :: HieDb -> Options -> HieTarget -> (HieFile -> IO a) -> IO a
+hieFileCommand conn opts target f = join $ reportAmbiguousErr opts =<< withTarget conn target f
 
-reportAmbiguousErr :: Either HieDbErr a -> IO a
-reportAmbiguousErr (Right x) = return x
-reportAmbiguousErr (Left e) = do
-  putStrLn $ showHieDbErr e
+reportAmbiguousErr :: Options -> Either HieDbErr a -> IO a
+reportAmbiguousErr _ (Right x) = return x
+reportAmbiguousErr o (Left e) = do
+  hPutStrLn stderr $ showHieDbErr o e
   exitFailure
 
-showHieDbErr :: HieDbErr -> String
-showHieDbErr e = case e of
-  NotIndexed mn muid -> unwords ["Module", moduleNameString mn ++ maybe "" (\uid -> "("++show uid++")") muid, "not indexed."]
+showHieDbErr :: Options -> HieDbErr -> String
+showHieDbErr opts e = case e of
+  NotIndexed mn muid -> unwords ["Module", ppMod opts mn ++ maybe "" (\uid -> "("++ppUnit opts uid++")") muid, "not indexed."]
   AmbiguousUnitId xs -> unlines $ "UnitId could be any of:" : map ((" - "<>) . unitIdString . modInfoUnit) (toList xs)
     <> ["Use --unit-id to disambiguate"]
   NameNotFound occ mn muid -> unwords
-    ["Couldn't find name:", occNameString occ, maybe "" (("from module " ++) . moduleNameString) mn ++ maybe "" (\uid ->"("++show uid++")") muid]
+    ["Couldn't find name:", ppName opts occ, maybe "" (("from module " ++) . moduleNameString) mn ++ maybe "" (\uid ->"("++ppUnit opts uid++")") muid]
   NameUnhelpfulSpan nm msg -> unwords
     ["Got no helpful spans for:", occNameString (nameOccName nm), "\nMsg:", msg]
  
-reportRefSpans :: [(Module,(Int,Int),(Int,Int))] -> IO ()
-reportRefSpans = traverse_ $ \(mn,(sl,sc),(el,ec)) ->
-  putStrLn $ concat
-    [ moduleNameString $ moduleName mn
-    , ':':show sl
-    , ':':show sc
-    , '-':show el
-    , ':':show ec
-    ]
+reportRefSpans :: Options -> [(Module,(Int,Int),(Int,Int),Maybe (Either FilePath BS.ByteString))] -> IO ()
+reportRefSpans opts xs = do
+  nc <- newIORef =<< makeNc
+  runDbM nc $ forM_ xs $ \(mn,(sl,sc),(el,ec),hie_f) -> do
+      liftIO $ do
+        when (colour opts) $
+          setSGR [SetUnderlining SingleUnderline]
+        putStr $ ppMod opts $ moduleName mn
+        when (colour opts) $
+          setSGR [SetUnderlining SingleUnderline]
+        putStr ":"
+        when (colour opts) $
+          setSGR [SetUnderlining SingleUnderline]
+        putStrLn $ colouredPP Magenta id opts $ concat
+          [ show sl
+          , ':':show sc
+          , '-':show el
+          , ':':show ec
+          ]
+        when (colour opts) $
+          setSGR []
+      case context opts of
+        Nothing -> pure ()
+        Just (fromIntegral -> n) -> do
+          msrc <- forM hie_f $ \case
+            Left loc -> withHieFile loc $ pure . hie_hs_src
+            Right src -> pure src
+          liftIO $ case msrc of
+            Nothing -> putStrLn "<source unavailable>"
+            Just src -> do
+              let ls = BS.lines src
 
-reportRefs :: [Res RefRow] -> IO ()
-reportRefs xs = reportRefSpans
-  [ (mdl,(refSLine x, refSCol x),(refELine x, refECol x))
+                  (beforeLines',duringLines') = splitAt (sl-1) ls
+                  (duringLines,afterLines')   = splitAt (el-sl+1) duringLines'
+
+                  beforeLines = takeEnd n beforeLines'
+                  afterLines  = take    n afterLines'
+
+                  (beforeChars,during') = BS.splitAt (sc-1) $ BS.concat $ intersperse "\n" $ duringLines
+                  (during,afterChars) = BS.splitAt (BS.length during' - (BS.length (last duringLines) - ec) - 1) during'
+
+                  before = BS.unlines beforeLines <> beforeChars
+                  after  = afterChars <> "\n" <> BS.unlines afterLines
+
+              BS.putStr before
+              when (colour opts) $
+                setSGR [SetColor Foreground Vivid Red, SetConsoleIntensity BoldIntensity]
+              BS.putStr during
+              when (colour opts) $
+                setSGR []
+              BS.putStrLn after
+
+reportRefs :: Options -> [Res RefRow] -> IO ()
+reportRefs opts xs = reportRefSpans opts
+  [ (mdl,(refSLine x, refSCol x),(refELine x, refECol x),Just $ Left $ refSrc x)
   | (x:.inf) <- xs
   , let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
   ]
+
+colouredPP :: Color -> (a -> String) -> Options -> a -> String
+colouredPP c pp opts x = pre <> pp x <> post
+  where
+    (pre,post)
+      | colour opts = (setSGRCode [SetColor Foreground Vivid c], setSGRCode [])
+      | otherwise = ("","")
+
+
+ppName :: Options -> OccName -> String
+ppName = colouredPP Red occNameString
+
+ppMod :: Options -> ModuleName -> String
+ppMod = colouredPP Green moduleNameString
+
+ppUnit :: Options -> UnitId -> String
+ppUnit = colouredPP Yellow show
+
+ppSpan :: Options -> (Int,Int) -> String
+ppSpan = colouredPP Magenta show
