@@ -77,3 +77,4 @@ test-suite hiedb-tests
                     , hiedb
                     , hspec
                     , process
+                    , temporary

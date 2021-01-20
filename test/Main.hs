@@ -1,18 +1,23 @@
 module Main where
 
 import GHC.Paths (libdir)
-import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb)
-import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId)
+import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb, withHieFile, addRefsFromLoaded, deleteMissingRealFiles)
+import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFileFromSource)
 import HieDb.Run (Command (..), Options (..), runCommand)
-import HieDb.Types (HieDbErr (..))
+import HieDb.Types (HieDbErr (..), SourceFile(..), runDbM)
+import HieDb.Utils (makeNc)
 import Module (mkModuleName, moduleNameString, stringToUnitId)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
 import System.Exit (ExitCode (..), die)
 import System.FilePath ((</>))
 import System.Process (callProcess, proc, readCreateProcessWithExitCode)
+import System.IO.Temp
+import System.IO
 import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, runIO,
                    shouldBe, shouldEndWith)
 import Test.Orphans ()
+import GHC.Fingerprint
+import Data.IORef
 
 main :: IO ()
 main = hspec spec
@@ -71,6 +76,50 @@ apiSpec = describe "api" $
             case res of
               Nothing -> pure ()
               Just _  -> fail "Lookup suceeded unexpectedly"
+
+        describe "deleteMissingRealFiles" $ do
+          it "Should delete missing indexed files and nothing else" $ \conn -> do
+
+            originalMods <- getAllIndexedMods conn
+
+            -- Index a new real file, and delete it
+            let contents = unlines
+                  [ "module Test123 where"
+                  , "foobarbaz :: Int"
+                  , "foobarbaz = 1"
+                  ]
+            fp <- withSystemTempFile "Test.hs" $ \fp h -> do
+              hPutStr h contents
+              hClose h
+              callProcess "ghc" $
+                "-fno-code" : -- don't produce unnecessary .o and .hi files
+                "-fwrite-ide-info" :
+                "-hiedir=" <> testTmp :
+                [fp]
+              let hie_f = testTmp </> "Test123.hie"
+              hash <- getFileHash hie_f
+              nc <- newIORef =<< makeNc
+              runDbM nc $ withHieFile hie_f $
+                addRefsFromLoaded conn hie_f (RealFile fp) hash
+              pure fp
+
+            -- Check that it was indexed
+            before <- lookupHieFileFromSource conn fp
+            case before of
+              Nothing -> fail $ "File "<> show fp <> "wasn't indexed"
+              Just _ -> pure ()
+
+            deleteMissingRealFiles conn
+
+            -- Check that it was deleted from the db
+            after <- lookupHieFileFromSource conn fp
+            case after of
+              Nothing -> pure ()
+              Just _ -> fail $ "deleteMissingRealFiles didn't delete file: " <> show fp
+
+            -- Check that the other modules are still indexed
+            afterMods <- getAllIndexedMods conn
+            originalMods `shouldBe` afterMods
 
 
 cliSpec :: Spec

@@ -46,6 +46,12 @@ instance Exception HieDbException where
 setHieTrace :: HieDb -> Maybe (T.Text -> IO ()) -> IO ()
 setHieTrace = setTrace . getConn
 
+-- | Encodes the original haskell source file of a module, along with whether
+-- it is "real" or not
+-- A file is "real" if it comes from the user project, as opposed to a
+-- dependency
+data SourceFile = RealFile FilePath | FakeFile (Maybe FilePath)
+
 data ModuleInfo
   = ModuleInfo
   { modInfoName :: ModuleName
@@ -55,7 +61,7 @@ data ModuleInfo
   , modInfoSrcFile :: Maybe FilePath -- ^ The path to the haskell source file, from which the @.hie@ file was created
   , modInfoIsReal :: Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
   , modInfoHash :: Fingerprint -- ^ The hash of the @.hie@ file from which this ModuleInfo was created
-  }
+  } deriving Eq
 
 instance Show ModuleInfo where
   show = show . toRow
@@ -115,7 +121,10 @@ data HieModuleRow
   = HieModuleRow
   { hieModuleHieFile :: FilePath -- ^ Full path to @.hie@ file based on which this row was created
   , hieModInfo :: ModuleInfo
-  }
+  } deriving Eq
+
+instance Show HieModuleRow where
+  show = show . toRow
 
 instance ToRow HieModuleRow where
   toRow (HieModuleRow a b) =

@@ -8,27 +8,32 @@ module HieDb.Create where
 
 import Prelude hiding (mod)
 
-import GHC
 import Compat.HieTypes
 import Compat.HieUtils
+
+import GHC
 import IfaceType
 import Name
+import GHC.Fingerprint
 
-import Control.Monad.IO.Class
-import Control.Monad
 import Control.Exception
+import Control.Monad
+import Control.Monad.IO.Class
+
+import qualified Data.Array as A
+import qualified Data.Map as M
+
+import Data.Int
+import Data.List ( isSuffixOf )
+import Data.Maybe
+import Data.String
+
+import System.Directory
 
 import Database.SQLite.Simple
-import Data.List ( isSuffixOf )
-import Data.String
-import Data.Int
-import GHC.Fingerprint
 
 import HieDb.Types
 import HieDb.Utils
-import qualified Data.Array as A
-import qualified Data.Map as M
-import Data.Maybe
 
 sCHEMA_VERSION :: Integer
 sCHEMA_VERSION = 5
@@ -81,6 +86,7 @@ initConn (getConn -> conn) = do
                 \, is_real BOOL NOT NULL \
                 \, hash    TEXT NOT NULL UNIQUE ON CONFLICT REPLACE \
                 \, CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE \
+                \, CONSTRAINT real_has_src CHECK ( (NOT is_real) OR (hs_src IS NOT NULL) ) \
                 \)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS refs \
@@ -187,28 +193,29 @@ addRefsFrom c@(getConn -> conn) path = do
   mods <- liftIO $ query conn "SELECT * FROM mods WHERE hieFile = ? AND hash = ?" (path, hash)
   case mods of
     (HieModuleRow{}:_) -> return ()
-    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path Nothing False hash hf
+    [] -> withHieFile path $ \hf -> addRefsFromLoaded c path (FakeFile Nothing) hash hf
 
 addRefsFromLoaded
   :: MonadIO m
   => HieDb -- ^ HieDb into which we're adding the file
   -> FilePath -- ^ Path to @.hie@ file
-  -> Maybe FilePath -- ^ Path to .hs file from which @.hie@ file was created
-  -> Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
+  -> SourceFile -- ^ Path to .hs file from which @.hie@ file was created
+                -- Also tells us if this is a real source file?
+                -- i.e. does it come from user's project (as opposed to from project's dependency)?
   -> Fingerprint -- ^ The hash of the @.hie@ file
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> m ()
-addRefsFromLoaded db@(getConn -> conn) path srcFile isReal hash hf = liftIO $ withTransaction conn $ do
-  execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
-  execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
-  execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
-  execute conn "DELETE FROM typerefs WHERE hieFile = ?" (Only path)
+addRefsFromLoaded db@(getConn -> conn) path sourceFile hash hf = liftIO $ withTransaction conn $ do
+  deleteInternalTables conn path
 
   let isBoot = "boot" `isSuffixOf` path
       mod    = moduleName smod
       uid    = moduleUnitId smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
+      (srcFile, isReal) = case sourceFile of
+        RealFile f -> (Just f, True)
+        FakeFile mf -> (mf, False)
       modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile isReal hash)
 
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
@@ -238,7 +245,28 @@ addSrcFile (getConn -> conn) hie srcFile isReal =
 {-| Delete all occurrences of given @.hie@ file from the database -}
 deleteFileFromIndex :: HieDb -> FilePath -> IO ()
 deleteFileFromIndex (getConn -> conn) path = withTransaction conn $ do
+  deleteInternalTables conn path
+  execute_ conn "DELETE FROM typenames WHERE NOT EXISTS ( SELECT 1 FROM typerefs WHERE typerefs.id = typenames.id )"
   execute conn "DELETE FROM mods  WHERE hieFile = ?" (Only path)
+
+{-| Delete all entries associated with modules for which the 'modInfoSrcFile' doesn't exist
+on the disk.
+Doesn't delete it if there is no associated 'modInfoSrcFile'
+-}
+deleteMissingRealFiles :: HieDb -> IO ()
+deleteMissingRealFiles (getConn -> conn) = withTransaction conn $ do
+  missing_file_keys <- fold_ conn "SELECT hieFile,hs_src FROM mods WHERE hs_src IS NOT NULL AND is_real" [] $
+    \acc (path,src) -> do
+      exists <- doesFileExist src
+      pure $ if exists then acc else path : acc
+  forM_ missing_file_keys $ \path -> do
+    deleteInternalTables conn path
+    execute conn "DELETE FROM mods WHERE hieFile = ?" (Only path)
+  execute_ conn "DELETE FROM typenames WHERE NOT EXISTS ( SELECT 1 FROM typerefs WHERE typerefs.id = typenames.id )"
+
+deleteInternalTables :: Connection -> FilePath -> IO ()
+deleteInternalTables conn path = do
   execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM typerefs WHERE hieFile = ?" (Only path)
