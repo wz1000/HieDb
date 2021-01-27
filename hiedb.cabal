@@ -10,7 +10,9 @@ author:              Zubin Duggal
 maintainer:          zubin.duggal@gmail.com
 copyright:           Zubin Duggal
 category:            Development
-extra-source-files:  CHANGELOG.md
+extra-source-files:
+  CHANGELOG.md
+  README.md
 
 
 source-repository head

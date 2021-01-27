@@ -10,8 +10,7 @@
 ### Procedure
 
 ```
-$ cabal new-configure -w <ghc-binary> --allow-newer
-$ cabal new-build
+$ cabal install hiedb
 ```
 
 ## Usage
