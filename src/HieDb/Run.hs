@@ -230,14 +230,18 @@ doIndex _ opts _ [] | reindex opts = pure ()
 doIndex conn opts h files = do
   nc <- newIORef =<< makeNc
   let progress' = if quiet opts then (\_ _ _ k -> k) else progress
-  start <- offsetTime
+
+  istart <- offsetTime
   (length -> done, length -> skipped)<- runDbM nc $ partition id <$>
     zipWithM (\f n -> progress' h (length files) n (addRefsFrom conn) f) files [0..]
-  when (done /= 0) $ void $ garbageCollectTypeNames conn
+  indexTime <- istart
 
-  end <- start
+  start <- offsetTime
+  when (done /= 0) $ void $ garbageCollectTypeNames conn
+  gcTime <- start
+
   unless (quiet opts) $
-    hPutStrLn h $ "\nCompleted! (" <> show done <> " indexed, " <> show skipped <> " skipped in " <> showDuration end <> ")"
+    hPutStrLn h $ "\nCompleted! (" <> show done <> " indexed, " <> show skipped <> " skipped in " <> showDuration indexTime <> " + " <> showDuration gcTime <> " gc)"
 
 runCommand :: LibDir -> Options -> Command -> IO ()
 runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlags conn -> do
