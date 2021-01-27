@@ -55,6 +55,7 @@ hiedbMain libdir = do
   defdb <- fromMaybe defaultLoc <$> lookupEnv "HIEDB"
   colr <- hSupportsANSIColor stdout
   hSetBuffering stdout NoBuffering
+  hSetBuffering stderr NoBuffering
   (opts, cmd) <- execParser $ progParseInfo defdb colr
   runCommand libdir opts cmd
 

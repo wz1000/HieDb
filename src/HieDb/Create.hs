@@ -88,6 +88,7 @@ initConn (getConn -> conn) = do
                 \, CONSTRAINT modid UNIQUE (mod, unit, is_boot) ON CONFLICT REPLACE \
                 \, CONSTRAINT real_has_src CHECK ( (NOT is_real) OR (hs_src IS NOT NULL) ) \
                 \)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS mod_hash ON mods(hieFile,hash)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS refs \
                 \( hieFile TEXT NOT NULL \
@@ -100,6 +101,7 @@ initConn (getConn -> conn) = do
                 \, ec   INTEGER NOT NULL \
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS refs_mod ON refs(hieFile)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS decls \
                 \( hieFile    TEXT NOT NULL \
@@ -111,6 +113,7 @@ initConn (getConn -> conn) = do
                 \, is_root    BOOL NOT NULL \
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS decls_mod ON decls(hieFile)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS defs \
                 \( hieFile    TEXT NOT NULL \
@@ -122,6 +125,7 @@ initConn (getConn -> conn) = do
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \, PRIMARY KEY(hieFile,occ) \
                 \)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS defs_mod ON defs(hieFile)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS typenames \
                 \( id      INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT \
@@ -143,6 +147,7 @@ initConn (getConn -> conn) = do
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
   execute_ conn "CREATE INDEX IF NOT EXISTS typeref_id ON typerefs(id)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS typerefs_mod ON typerefs(hieFile)"
 
 {-| Add names of types from @.hie@ file to 'HieDb'.
 Returns an Array mapping 'TypeIndex' to database ID assigned to the 
