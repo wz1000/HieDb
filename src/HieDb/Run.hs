@@ -30,6 +30,7 @@ import System.Exit
 import System.Time.Extra
 
 import System.Console.ANSI
+import System.Console.Terminal.Size
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -211,7 +212,7 @@ hieTarget =
 
 progress :: Handle -> Int -> Int -> (FilePath -> DbMonad Bool) -> FilePath -> DbMonad Bool
 progress hndl total cur act f = do
-  mw <- fmap snd <$> liftIO getTerminalSize
+  mw <- liftIO $ fmap width <$> size
   let msg' = unwords ["Processing file", show (cur + 1) ++ "/" ++ show total ++ ":", f] ++ "..."
   msg <- liftIO $ case mw of
     Nothing -> hPutStrLn hndl "" >> pure msg'

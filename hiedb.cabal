@@ -64,6 +64,7 @@ library
                      , optparse-applicative
                      , extra
                      , ansi-terminal
+                     , terminal-size
 
 test-suite hiedb-tests
   import:             common-options
