@@ -18,6 +18,7 @@ import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, h
 import Test.Orphans ()
 import GHC.Fingerprint
 import Data.IORef
+import Data.List (sort)
 
 main :: IO ()
 main = hspec spec
@@ -134,11 +135,13 @@ cliSpec =
     describe "ls" $
       it "lists the indexed modules" $ do
         cwd <- getCurrentDirectory
-        let expectedOutput = unlines (fmap (\x -> cwd </> testTmp </> x)
+        let expectedOutput = fmap (\x -> cwd </> testTmp </> x)
               [ "Sub/Module2.hie\tSub.Module2\tmain"
               , "Module1.hie\tModule1\tmain"
-              ])
-        runHieDbCli ["ls"] `suceedsWithStdin` expectedOutput
+              ]
+        (exitCode, actualStdin, _actualStdErr) <- runHieDbCli ["ls"]
+        exitCode `shouldBe` ExitSuccess
+        (sort $ lines actualStdin) `shouldBe` (sort expectedOutput)
 
     describe "name-refs" $
       it "lists all references of given function" $ do
