@@ -130,7 +130,7 @@ cliSpec =
     describe "index" $
       it "indexes testing project .hie files" $ do
         runHieDbCli ["index", testTmp, "--quiet"]
-          `suceedsWithStdin` ""
+          `succeedsWithStdin` ""
 
     describe "ls" $
       it "lists the indexed modules" $ do
@@ -146,7 +146,7 @@ cliSpec =
     describe "name-refs" $
       it "lists all references of given function" $ do
         runHieDbCli ["name-refs", "function2"]
-          `suceedsWithStdin` unlines
+          `succeedsWithStdin` unlines
             [ "Module1:3:7-3:16"
             , "Module1:12:1-12:10"
             , "Module1:13:1-13:10"
@@ -155,7 +155,7 @@ cliSpec =
     describe "point-refs" $
       it "list references at given point" $
         runHieDbCli ["point-refs", "Module1", "13", "2"]
-          `suceedsWithStdin` unlines
+          `succeedsWithStdin` unlines
             [ "Module1:3:7-3:16"
             , "Module1:12:1-12:10"
             , "Module1:13:1-13:10"
@@ -164,7 +164,7 @@ cliSpec =
     describe "point-types" $ do
       it "Prints types of symbol under cursor" $
         runHieDbCli ["point-types", "Module1", "10", "10" ]
-          `suceedsWithStdin` unlines
+          `succeedsWithStdin` unlines
             [ "Int -> Bool" {- types of `even` function under cursor -}
             , "forall a. Integral a => a -> Bool"
             ]
@@ -177,7 +177,7 @@ cliSpec =
     describe "point-defs" $ do
       it "outputs the location of symbol when definition site can be found is indexed" $
         runHieDbCli ["point-defs", "Module1", "13", "29"]
-          `suceedsWithStdin` unlines
+          `succeedsWithStdin` unlines
             [ "Sub.Module2:7:1-7:8"
             ]
       it "Fails with informative error message when there's no symbol at given point" $ do
@@ -195,7 +195,7 @@ cliSpec =
     describe "point-info" $ do
       it "gives information about symbol at specified location" $
         runHieDbCli ["point-info", "Sub.Module2", "10", "10"]
-          `suceedsWithStdin` unlines
+          `succeedsWithStdin` unlines
             [ "Span: test/data/Sub/Module2.hs:10:7-23"
             , "Constructors: {(ConDeclH98, ConDecl)}"
             , "Identifiers:"
@@ -206,7 +206,7 @@ cliSpec =
             ]
       it "correctly prints type signatures" $
         runHieDbCli ["point-info", "Module1", "10", "10"]
-          `suceedsWithStdin` unlines
+          `succeedsWithStdin` unlines
             [ "Span: test/data/Module1.hs:10:8-11"
             , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
             , "Identifiers:"
@@ -222,12 +222,12 @@ cliSpec =
     describe "name-def" $
       it "lookup definition of name" $
         runHieDbCli ["name-def", "showInt"]
-          `suceedsWithStdin` "Sub.Module2:7:1-7:8\n"
+          `succeedsWithStdin` "Sub.Module2:7:1-7:8\n"
 
     describe "type-def" $
       it "lookup definition of type" $
         runHieDbCli ["type-def", "Data1"]
-          `suceedsWithStdin` "Sub.Module2:9:1-11:28\n"
+          `succeedsWithStdin` "Sub.Module2:9:1-11:28\n"
 
     describe "cat" $
       describe "dumps module source stored in .hie file" $ do
@@ -235,34 +235,34 @@ cliSpec =
         it "when given --hiefile" $ do
           cwd <- getCurrentDirectory
           runHieDbCli ["cat", "--hiefile" , cwd </> testTmp </> "Module1.hie"]
-            `suceedsWithStdin` (module1Src <> "\n")
+            `succeedsWithStdin` (module1Src <> "\n")
         it "when given module name" $
           runHieDbCli ["cat", "Module1"]
-            `suceedsWithStdin` (module1Src <> "\n")
+            `succeedsWithStdin` (module1Src <> "\n")
 
     describe "lookup-hie" $
       it "looks up location of .hie file" $ do
         cwd <- getCurrentDirectory
         runHieDbCli ["lookup-hie", "Module1"]
-          `suceedsWithStdin` (cwd </> testTmp </> "Module1.hie\n")
+          `succeedsWithStdin` (cwd </> testTmp </> "Module1.hie\n")
 
     describe "module-uids" $
       it "lists uids for given module" $
         runHieDbCli ["module-uids", "Module1"]
-          `suceedsWithStdin` "main\n"
+          `succeedsWithStdin` "main\n"
     
     describe "rm" $
       it "removes given module from DB" $ do
         runHieDbCli ["rm", "Module1"]
-          `suceedsWithStdin` ""
+          `succeedsWithStdin` ""
         -- Check with 'ls' comand that there's just one module left
         cwd <- getCurrentDirectory
-        runHieDbCli ["ls"] `suceedsWithStdin` (cwd </> testTmp </> "Sub/Module2.hie\tSub.Module2\tmain\n")
+        runHieDbCli ["ls"] `succeedsWithStdin` (cwd </> testTmp </> "Sub/Module2.hie\tSub.Module2\tmain\n")
     
 
 
-suceedsWithStdin :: IO (ExitCode, String, String) -> String -> Expectation
-suceedsWithStdin action expectedStdin = do
+succeedsWithStdin :: IO (ExitCode, String, String) -> String -> Expectation
+succeedsWithStdin action expectedStdin = do
   (exitCode, actualStdin, _actualStdErr) <- action
   exitCode `shouldBe` ExitSuccess
   actualStdin `shouldBe` expectedStdin
