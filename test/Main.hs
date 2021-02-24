@@ -11,6 +11,7 @@ import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRec
 import System.Exit (ExitCode (..), die)
 import System.FilePath ((</>))
 import System.Process (callProcess, proc, readCreateProcessWithExitCode)
+import System.Environment (lookupEnv)
 import System.IO.Temp
 import System.IO
 import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, runIO,
@@ -19,6 +20,7 @@ import Test.Orphans ()
 import GHC.Fingerprint
 import Data.IORef
 import Data.List (sort)
+import Data.Maybe (fromMaybe)
 
 main :: IO ()
 main = hspec spec
@@ -92,7 +94,7 @@ apiSpec = describe "api" $
             fp <- withSystemTempFile "Test.hs" $ \fp h -> do
               hPutStr h contents
               hClose h
-              callProcess "ghc" $
+              runGhc $
                 "-fno-code" : -- don't produce unnecessary .o and .hi files
                 "-fwrite-ide-info" :
                 "-hiedir=" <> testTmp :
@@ -278,16 +280,21 @@ runHieDbCli args = do
 
 
 findHieDbExecutable :: IO FilePath
-findHieDbExecutable =
+findHieDbExecutable = 
   maybe (die "Did not find hiedb executable") pure =<< findExecutable "hiedb"
 
 
 cleanTestData :: IO ()
 cleanTestData = removeDirectoryRecursive testTmp
 
+runGhc :: [String] -> IO ()
+runGhc args = do
+  hc <- fromMaybe "ghc" <$> lookupEnv "HC"
+  callProcess hc args
+
 compileTestModules :: IO ()
-compileTestModules =
-  callProcess "ghc" $
+compileTestModules = do
+  runGhc $
     "-fno-code" : -- don't produce unnecessary .o and .hi files
     "-fwrite-ide-info" :
     "-hiedir=" <> testTmp :
