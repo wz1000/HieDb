@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Main where
 
 import GHC.Paths (libdir)
@@ -6,7 +7,8 @@ import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFi
 import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..), SourceFile(..), runDbM)
 import HieDb.Utils (makeNc)
-import Module (mkModuleName, moduleNameString, stringToUnit)
+import HieDb.Compat (stringToUnit)
+import Module (mkModuleName, moduleNameString)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
 import System.Exit (ExitCode (..), die)
 import System.FilePath ((</>))
@@ -203,20 +205,32 @@ cliSpec =
             , "Identifiers:"
             , "Symbol:c:Data1Constructor1:Sub.Module2:main"
             , "Data1Constructor1 defined at test/data/Sub/Module2.hs:10:7-23"
+#if __GLASGOW_HASKELL__ >= 900
             , "    Details:  Nothing {declaration of constructor bound at: test/data/Sub/Module2.hs:10:7-23}"
+#else
+            , "    IdentifierDetails Nothing {Decl ConDec (Just SrcSpanOneLine \"test/data/Sub/Module2.hs\" 10 7 24)}"
+#endif
             , "Types:\n"
             ]
       it "correctly prints type signatures" $
         runHieDbCli ["point-info", "Module1", "10", "10"]
           `succeedsWithStdin` unlines
             [ "Span: test/data/Module1.hs:10:8-11"
+#if __GLASGOW_HASKELL__ >= 900
             , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
+#else
+            , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
+#endif
             , "Identifiers:"
             , "Symbol:v:even:GHC.Real:base"
             , "even defined at <no location info>"
+#if __GLASGOW_HASKELL__ >= 900
             , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
             , "$dIntegral defined at <no location info>"
             , "    Details:  Just Integral Int {usage of evidence variable}"
+#else
+            , "    IdentifierDetails Just forall a. Integral a => a -> Bool {Use}"
+#endif
             , "Types:"
             , "Int -> Bool"
             , "forall a. Integral a => a -> Bool"

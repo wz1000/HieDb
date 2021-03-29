@@ -12,10 +12,8 @@ import GHC
 import Compat.HieTypes
 import Compat.HieUtils
 import Name
-import Module
 import Outputable ((<+>),hang,showSDoc,ppr,text)
 import IfaceType (IfaceType)
-import SrcLoc
 
 import qualified FastString as FS
 

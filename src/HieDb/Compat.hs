@@ -1,10 +1,21 @@
 
 {-# LANGUAGE CPP #-}
-module HieDb.Compat where
+module HieDb.Compat (
+    nodeInfo'
+    , Unit
+    , unitString
+    , stringToUnit
+    , moduleUnit
+    , unhelpfulSpanFS
+
+) where
 
 import Compat.HieTypes
 
+import Module
+
 #if __GLASGOW_HASKELL__ >= 900
+import GHC.Types.SrcLoc
 import Compat.HieUtils
 
 import qualified Data.Map as M
@@ -28,8 +39,6 @@ combineNodeInfo' :: Ord a => NodeInfo a -> NodeInfo a -> NodeInfo a
     mergeSorted [] bs = bs
 #else
 import qualified FastString as FS
-
-import Module
 
 nodeInfo' :: HieAST TypeIndex -> NodeInfo TypeIndex
 nodeInfo' = nodeInfo

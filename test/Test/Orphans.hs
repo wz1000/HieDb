@@ -2,8 +2,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.Orphans where
 
+import HieDb.Compat
 import HieDb.Types
-import Module (ModuleName, moduleName, moduleNameString, moduleUnit)
+import Module (ModuleName, moduleName, moduleNameString)
 import Name (Name, nameModule, nameOccName)
 import OccName (OccName, occNameString)
 

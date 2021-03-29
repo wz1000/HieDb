@@ -12,7 +12,7 @@ import qualified Algebra.Graph.Export.Dot as G
 
 import           GHC
 import           Compat.HieTypes
-import           Module
+-- import           Module
 import           Name
 
 import           System.Directory
