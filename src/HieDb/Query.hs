@@ -33,6 +33,7 @@ import           Data.IORef
 import Database.SQLite.Simple
 
 import           HieDb.Dump (sourceCode)
+import           HieDb.Compat
 import           HieDb.Types
 import           HieDb.Utils
 import qualified HieDb.Html as Html

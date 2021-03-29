@@ -49,6 +49,7 @@ library
                        HieDb.Utils,
                        HieDb.Create,
                        HieDb.Query,
+                       HieDb.Compat,
                        HieDb.Types,
                        HieDb.Dump,
                        HieDb.Html,

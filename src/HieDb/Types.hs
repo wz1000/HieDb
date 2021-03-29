@@ -35,6 +35,8 @@ import Database.SQLite.Simple.FromField
 
 import qualified Text.ParserCombinators.ReadP as R
 
+import HieDb.Compat
+
 newtype HieDb = HieDb { getConn :: Connection }
 
 data HieDbException
@@ -80,15 +82,10 @@ instance ToField ModuleName where
 instance FromField ModuleName where
   fromField fld = mkModuleName . T.unpack <$> fromField fld
 
-instance ToField (GenUnit UnitId) where
+instance ToField Unit where
   toField uid = SQLText $ T.pack $ unitString uid
-instance FromField (GenUnit UnitId) where
+instance FromField Unit where
   fromField fld = stringToUnit . T.unpack <$> fromField fld
-
-instance ToField UnitId where
-  toField uid = SQLText $ T.pack $ unitIdString uid
-instance FromField UnitId where
-  fromField fld = stringToUnitId . T.unpack <$> fromField fld
 
 instance ToField Fingerprint where
   toField hash = SQLText $ T.pack $ show hash

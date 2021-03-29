@@ -26,7 +26,6 @@ import DynFlags
 import SysTools
 
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 import qualified FastString as FS
 
@@ -46,6 +45,7 @@ import Data.Monoid
 import Data.IORef
 
 import HieDb.Types
+import HieDb.Compat
 import Database.SQLite.Simple
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
@@ -72,8 +72,11 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 #endif
         HTyConApp _ (HieArgs xs) -> mapM_ (next . snd) xs
         HForAllTy ((_ , a),_) b -> mapM_ next [a,b]
-        -- HFunTy a b -> mapM_ next [a,b]
-        HFunTy a b _ -> mapM_ next [a,b]
+#if __GLASGOW_HASKELL__ >= 900
+        HFunTy a b c -> mapM_ next [a,b,c]
+#else
+        HFunTy a b -> mapM_ next [a,b]
+#endif
         HQualTy a b -> mapM_ next [a,b]
         HLitTy _ -> pure ()
         HCastTy a -> go d a
@@ -117,7 +120,11 @@ findDefInFile occ mdl file = do
   nc <- readIORef ncr
   return $ case lookupOrigNameCache (nsNames nc) mdl occ of
     Just name -> case nameSrcSpan name of
+#if __GLASGOW_HASKELL__ >= 900
       RealSrcSpan sp _ -> Right (sp, mdl)
+#else
+      RealSrcSpan sp -> Right (sp, mdl)
+#endif
       UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (FS.unpackFS $ unhelpfulSpanFS msg)
     Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnit mdl)
 
@@ -200,7 +207,11 @@ genDefRow path smod refmap = genRows $ M.toList refmap
   where
     genRows = mapMaybe go
     getSpan name dets
+#if __GLASGOW_HASKELL__ >= 900
       | RealSrcSpan sp _ <- nameSrcSpan name = Just sp
+#else
+      | RealSrcSpan sp <- nameSrcSpan name = Just sp
+#endif
       | otherwise = do
           (sp, _dets) <- find defSpan dets
           pure sp
@@ -229,19 +240,3 @@ identifierTree nd@HieTypes.Node{ nodeChildren } =
     { rootLabel = nd { nodeChildren = mempty }
     , subForest = map identifierTree nodeChildren
     }
-
--- nodeInfo' :: Ord a => HieAST a -> NodeInfo a
-nodeInfo' :: HieAST TypeIndex -> NodeInfo TypeIndex
-nodeInfo' = M.foldl' combineNodeInfo' emptyNodeInfo . getSourcedNodeInfo . sourcedNodeInfo
-
-combineNodeInfo' :: Ord a => NodeInfo a -> NodeInfo a -> NodeInfo a
-(NodeInfo as ai ad) `combineNodeInfo'` (NodeInfo bs bi bd) =
-  NodeInfo (S.union as bs) (mergeSorted ai bi) (M.unionWith (<>) ad bd)
-  where
-    mergeSorted :: Ord a => [a] -> [a] -> [a]
-    mergeSorted la@(a:as) lb@(b:bs) = case compare a b of
-                                        LT -> a : mergeSorted as lb
-                                        EQ -> a : mergeSorted as bs
-                                        GT -> b : mergeSorted la bs
-    mergeSorted as [] = as
-    mergeSorted [] bs = bs

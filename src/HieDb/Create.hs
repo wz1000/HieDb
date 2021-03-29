@@ -32,9 +32,10 @@ import System.Directory
 
 import Database.SQLite.Simple
 
+import HieDb.Compat
 import HieDb.Types
 import HieDb.Utils
-import GHC.Data.FastString  as FS      ( FastString )
+import FastString  as FS      ( FastString )
 
 sCHEMA_VERSION :: Integer
 sCHEMA_VERSION = 5
