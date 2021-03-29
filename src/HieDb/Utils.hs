@@ -26,6 +26,7 @@ import DynFlags
 import SysTools
 
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import qualified FastString as FS
 
@@ -71,7 +72,8 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 #endif
         HTyConApp _ (HieArgs xs) -> mapM_ (next . snd) xs
         HForAllTy ((_ , a),_) b -> mapM_ next [a,b]
-        HFunTy a b -> mapM_ next [a,b]
+        -- HFunTy a b -> mapM_ next [a,b]
+        HFunTy a b _ -> mapM_ next [a,b]
         HQualTy a b -> mapM_ next [a,b]
         HLitTy _ -> pure ()
         HCastTy a -> go d a
@@ -115,9 +117,9 @@ findDefInFile occ mdl file = do
   nc <- readIORef ncr
   return $ case lookupOrigNameCache (nsNames nc) mdl occ of
     Just name -> case nameSrcSpan name of
-      RealSrcSpan sp -> Right (sp, mdl)
-      UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
-    Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnitId mdl)
+      RealSrcSpan sp _ -> Right (sp, mdl)
+      UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (FS.unpackFS $ unhelpfulSpanFS msg)
+    Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnit mdl)
 
 pointCommand :: HieFile -> (Int, Int) -> Maybe (Int, Int) -> (HieAST TypeIndex -> a) -> [a]
 pointCommand hf (sl,sc) mep k =
@@ -158,7 +160,7 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
 
     goRef (Right name, (sp,_))
       | Just mod <- nameModule_maybe name = Just $
-          RefRow path occ (moduleName mod) (moduleUnitId mod) sl sc el ec
+          RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec
           where
             occ = nameOccName name
             sl = srcSpanStartLine sp
@@ -198,7 +200,7 @@ genDefRow path smod refmap = genRows $ M.toList refmap
   where
     genRows = mapMaybe go
     getSpan name dets
-      | RealSrcSpan sp <- nameSrcSpan name = Just sp
+      | RealSrcSpan sp _ <- nameSrcSpan name = Just sp
       | otherwise = do
           (sp, _dets) <- find defSpan dets
           pure sp
@@ -222,8 +224,24 @@ genDefRow path smod refmap = genRows $ M.toList refmap
     go _ = Nothing
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )
-identifierTree HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren } =
+identifierTree nd@HieTypes.Node{ nodeChildren } =
   Data.Tree.Node
-    { rootLabel = HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren = mempty }
+    { rootLabel = nd { nodeChildren = mempty }
     , subForest = map identifierTree nodeChildren
     }
+
+-- nodeInfo' :: Ord a => HieAST a -> NodeInfo a
+nodeInfo' :: HieAST TypeIndex -> NodeInfo TypeIndex
+nodeInfo' = M.foldl' combineNodeInfo' emptyNodeInfo . getSourcedNodeInfo . sourcedNodeInfo
+
+combineNodeInfo' :: Ord a => NodeInfo a -> NodeInfo a -> NodeInfo a
+(NodeInfo as ai ad) `combineNodeInfo'` (NodeInfo bs bi bd) =
+  NodeInfo (S.union as bs) (mergeSorted ai bi) (M.unionWith (<>) ad bd)
+  where
+    mergeSorted :: Ord a => [a] -> [a] -> [a]
+    mergeSorted la@(a:as) lb@(b:bs) = case compare a b of
+                                        LT -> a : mergeSorted as lb
+                                        EQ -> a : mergeSorted as bs
+                                        GT -> b : mergeSorted la bs
+    mergeSorted as [] = as
+    mergeSorted [] bs = bs

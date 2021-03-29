@@ -6,7 +6,7 @@ import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFi
 import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..), SourceFile(..), runDbM)
 import HieDb.Utils (makeNc)
-import Module (mkModuleName, moduleNameString, stringToUnitId)
+import Module (mkModuleName, moduleNameString, stringToUnit)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
 import System.Exit (ExitCode (..), die)
 import System.FilePath ((</>))
@@ -53,7 +53,7 @@ apiSpec = describe "api" $
             res <- resolveUnitId conn (mkModuleName "Module1")
             case res of
               Left e       -> fail $ "Unexpected error: " <> show e
-              Right unitId -> unitId `shouldBe` stringToUnitId "main"
+              Right unit   -> unit `shouldBe` stringToUnit "main"
 
           it "returns NotIndexed error on not-indexed module" $ \conn -> do
             let notIndexedModule = mkModuleName "NotIndexed"
@@ -61,12 +61,12 @@ apiSpec = describe "api" $
             case res of
               Left (NotIndexed modName Nothing) -> modName `shouldBe` notIndexedModule
               Left e                            -> fail $ "Unexpected error: " <> show e
-              Right unitId                      -> fail $ "Unexpected success: " <> show unitId
+              Right unit                        -> fail $ "Unexpected success: " <> show unit
 
         describe "lookupHieFile" $ do
           it "Should lookup indexed Module" $ \conn -> do
             let modName = mkModuleName "Module1"
-            res <- lookupHieFile conn modName (stringToUnitId "main")
+            res <- lookupHieFile conn modName (stringToUnit "main")
             case res of
               Just modRow -> do
                 hieModuleHieFile modRow `shouldEndWith` "Module1.hie"
@@ -75,7 +75,7 @@ apiSpec = describe "api" $
                 modInfoName modInfo `shouldBe` modName
               Nothing -> fail "Should have looked up indexed file"
           it "Should return Nothing for not indexed Module" $ \conn -> do
-            res <- lookupHieFile conn (mkModuleName "NotIndexed") (stringToUnitId "main")
+            res <- lookupHieFile conn (mkModuleName "NotIndexed") (stringToUnit "main")
             case res of
               Nothing -> pure ()
               Just _  -> fail "Lookup suceeded unexpectedly"
@@ -175,7 +175,7 @@ cliSpec =
         actualStdout `shouldBe` ""
         exitCode `shouldBe` ExitFailure 1
         actualStderr `shouldBe` "No symbols found at (8,21) in Module1\n"
-        
+
     describe "point-defs" $ do
       it "outputs the location of symbol when definition site can be found is indexed" $
         runHieDbCli ["point-defs", "Module1", "13", "29"]
@@ -203,18 +203,20 @@ cliSpec =
             , "Identifiers:"
             , "Symbol:c:Data1Constructor1:Sub.Module2:main"
             , "Data1Constructor1 defined at test/data/Sub/Module2.hs:10:7-23"
-            , "    IdentifierDetails Nothing {Decl ConDec (Just SrcSpanOneLine \"test/data/Sub/Module2.hs\" 10 7 24)}"
+            , "    Details:  Nothing {declaration of constructor bound at: test/data/Sub/Module2.hs:10:7-23}"
             , "Types:\n"
             ]
       it "correctly prints type signatures" $
         runHieDbCli ["point-info", "Module1", "10", "10"]
           `succeedsWithStdin` unlines
             [ "Span: test/data/Module1.hs:10:8-11"
-            , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
+            , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
             , "Identifiers:"
             , "Symbol:v:even:GHC.Real:base"
             , "even defined at <no location info>"
-            , "    IdentifierDetails Just forall a. Integral a => a -> Bool {Use}"
+            , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
+            , "$dIntegral defined at <no location info>"
+            , "    Details:  Just Integral Int {usage of evidence variable}"
             , "Types:"
             , "Int -> Bool"
             , "forall a. Integral a => a -> Bool"
@@ -252,7 +254,7 @@ cliSpec =
       it "lists uids for given module" $
         runHieDbCli ["module-uids", "Module1"]
           `succeedsWithStdin` "main\n"
-    
+
     describe "rm" $
       it "removes given module from DB" $ do
         runHieDbCli ["rm", "Module1"]
@@ -260,7 +262,7 @@ cliSpec =
         -- Check with 'ls' comand that there's just one module left
         cwd <- getCurrentDirectory
         runHieDbCli ["ls"] `succeedsWithStdin` (cwd </> testTmp </> "Sub/Module2.hie\tSub.Module2\tmain\n")
-    
+
 
 
 succeedsWithStdin :: IO (ExitCode, String, String) -> String -> Expectation
@@ -280,7 +282,7 @@ runHieDbCli args = do
 
 
 findHieDbExecutable :: IO FilePath
-findHieDbExecutable = 
+findHieDbExecutable =
   maybe (die "Did not find hiedb executable") pure =<< findExecutable "hiedb"
 
 

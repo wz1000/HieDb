@@ -34,6 +34,7 @@ import Database.SQLite.Simple
 
 import HieDb.Types
 import HieDb.Utils
+import GHC.Data.FastString  as FS      ( FastString )
 
 sCHEMA_VERSION :: Integer
 sCHEMA_VERSION = 5
@@ -60,7 +61,7 @@ checkVersion k db@(getConn -> conn) = do
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
 withHieDb fp f = withConnection fp (checkVersion f . HieDb)
 
-{-| Given GHC LibDir and path to @.hiedb@ file, 
+{-| Given GHC LibDir and path to @.hiedb@ file,
 constructs DynFlags (required for printing info from @.hie@ files)
 and 'HieDb' and passes them to given function.
 -}
@@ -150,7 +151,7 @@ initConn (getConn -> conn) = do
   execute_ conn "CREATE INDEX IF NOT EXISTS typerefs_mod ON typerefs(hieFile)"
 
 {-| Add names of types from @.hie@ file to 'HieDb'.
-Returns an Array mapping 'TypeIndex' to database ID assigned to the 
+Returns an Array mapping 'TypeIndex' to database ID assigned to the
 corresponding record in DB.
 -}
 addArr :: HieDb -> A.Array TypeIndex HieTypeFlat -> IO (A.Array TypeIndex (Maybe Int64))
@@ -166,7 +167,7 @@ addArr (getConn -> conn) arr = do
       Just m -> do
         let occ = nameOccName n
             mod = moduleName m
-            uid = moduleUnitId m
+            uid = moduleUnit m
         execute conn "INSERT INTO typenames(name,mod,unit) VALUES (?,?,?)" (occ,mod,uid)
         Just . fromOnly . head <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
 
@@ -179,7 +180,9 @@ addTypeRefs
   -> IO ()
 addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
   where
+    arr :: A.Array TypeIndex HieTypeFlat
     arr = hie_types hf
+    asts :: M.Map FS.FastString (HieAST TypeIndex)
     asts = getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
@@ -187,7 +190,7 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
         $ mapMaybe (\x -> guard (any (not . isOccurrence) (identInfo x)) *> identType x)
         $ M.elems
         $ nodeIdentifiers
-        $ nodeInfo ast
+        $ nodeInfo' ast
       mapM_ addTypesFromAst $ nodeChildren ast
 
 {-| Adds all references from given @.hie@ file to 'HieDb'.
@@ -219,7 +222,7 @@ addRefsFromLoaded db@(getConn -> conn) path sourceFile hash hf = liftIO $ withTr
 
   let isBoot = "boot" `isSuffixOf` path
       mod    = moduleName smod
-      uid    = moduleUnitId smod
+      uid    = moduleUnit smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
       (srcFile, isReal) = case sourceFile of
@@ -243,7 +246,7 @@ addRefsFromLoaded db@(getConn -> conn) path sourceFile hash hf = liftIO $ withTr
 No action is taken if the corresponding @.hie@ file has not been indexed yet.
 -}
 addSrcFile
-  :: HieDb 
+  :: HieDb
   -> FilePath -- ^ Path to @.hie@ file
   -> FilePath -- ^ Path to .hs file to be added to DB
   -> Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?

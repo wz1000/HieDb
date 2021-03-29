@@ -5,6 +5,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module HieDb.Types where
 
@@ -55,7 +56,7 @@ data SourceFile = RealFile FilePath | FakeFile (Maybe FilePath)
 data ModuleInfo
   = ModuleInfo
   { modInfoName :: ModuleName
-  , modInfoUnit :: UnitId -- ^ Identifies the package this module is part of
+  , modInfoUnit :: Unit -- ^ Identifies the package this module is part of
   , modInfoIsBoot :: Bool -- ^ True, when this ModuleInfo was created by indexing @.hie-boot@  file;
                           -- False when it was created from @.hie@ file
   , modInfoSrcFile :: Maybe FilePath -- ^ The path to the haskell source file, from which the @.hie@ file was created
@@ -78,6 +79,11 @@ instance ToField ModuleName where
   toField mod = SQLText $ T.pack $ moduleNameString mod
 instance FromField ModuleName where
   fromField fld = mkModuleName . T.unpack <$> fromField fld
+
+instance ToField (GenUnit UnitId) where
+  toField uid = SQLText $ T.pack $ unitString uid
+instance FromField (GenUnit UnitId) where
+  fromField fld = stringToUnit . T.unpack <$> fromField fld
 
 instance ToField UnitId where
   toField uid = SQLText $ T.pack $ unitIdString uid
@@ -139,7 +145,7 @@ data RefRow
   { refSrc :: FilePath
   , refNameOcc :: OccName
   , refNameMod :: ModuleName
-  , refNameUnit :: UnitId
+  , refNameUnit :: Unit
   , refSLine :: Int
   , refSCol :: Int
   , refELine :: Int
@@ -175,7 +181,7 @@ instance FromRow DeclRow where
 data TypeName = TypeName
   { typeName :: OccName
   , typeMod :: ModuleName
-  , typeUnit :: UnitId
+  , typeUnit :: Unit
   }
 
 data TypeRef = TypeRef
@@ -233,9 +239,9 @@ instance MonadIO m => NameCacheMonad (DbMonadT m) where
 
 
 data HieDbErr
-  = NotIndexed ModuleName (Maybe UnitId)
+  = NotIndexed ModuleName (Maybe Unit)
   | AmbiguousUnitId (NonEmpty ModuleInfo)
-  | NameNotFound OccName (Maybe ModuleName) (Maybe UnitId)
+  | NameNotFound OccName (Maybe ModuleName) (Maybe Unit)
   | NoNameAtPoint HieTarget (Int,Int)
   | NameUnhelpfulSpan Name String
 
@@ -251,7 +257,8 @@ instance Show Symbol where
            <> ":"
            <> moduleNameString (moduleName $ symModule s)
            <> ":"
-           <> unitIdString (moduleUnitId $ symModule s)
+        --    <> unitIdString (moduleUnit $ symModule s)
+           <> unitString (moduleUnit $ symModule s)
 
 instance Read Symbol where
   readsPrec = const $ R.readP_to_S readSymbol
@@ -275,7 +282,7 @@ readSymbol = do
   u <- R.many1 R.get
   R.eof
   let mn  = mkModuleName m
-      uid = stringToUnitId u
+      uid = stringToUnit u
       sym = Symbol
               { symName   = mkOccName ns n
               , symModule = mkModule uid mn
@@ -288,5 +295,5 @@ newtype LibDir = LibDir FilePath
 
 -- | A way to specify which HieFile to operate on.
 -- Either the path to @.hie@ file is given in the Left
--- Or ModuleName (with optional UnitId) is given in the Right
-type HieTarget = Either FilePath (ModuleName, Maybe UnitId)
+-- Or ModuleName (with optional Unit) is given in the Right
+type HieTarget = Either FilePath (ModuleName, Maybe Unit)

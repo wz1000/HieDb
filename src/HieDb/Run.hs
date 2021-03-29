@@ -14,6 +14,7 @@ import Name
 import Module
 import Outputable ((<+>),hang,showSDoc,ppr,text)
 import IfaceType (IfaceType)
+import SrcLoc
 
 import qualified FastString as FS
 
@@ -86,15 +87,15 @@ data Options
 data Command
   = Init
   | Index [FilePath]
-  | NameRefs String (Maybe ModuleName) (Maybe UnitId)
-  | TypeRefs String (Maybe ModuleName) (Maybe UnitId)
-  | NameDef  String (Maybe ModuleName) (Maybe UnitId)
-  | TypeDef  String (Maybe ModuleName) (Maybe UnitId)
+  | NameRefs String (Maybe ModuleName) (Maybe Unit)
+  | TypeRefs String (Maybe ModuleName) (Maybe Unit)
+  | NameDef  String (Maybe ModuleName) (Maybe Unit)
+  | TypeDef  String (Maybe ModuleName) (Maybe Unit)
   | Cat HieTarget
   | Ls
   | Rm [HieTarget]
   | ModuleUIDs ModuleName
-  | LookupHieFile ModuleName (Maybe UnitId)
+  | LookupHieFile ModuleName (Maybe Unit)
   | RefsAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | TypesAtPoint HieTarget (Int,Int) (Maybe (Int,Int))
   | DefsAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
@@ -195,9 +196,9 @@ cmdParser
 posParser :: Char -> Parser (Int,Int)
 posParser c = (,) <$> argument auto (metavar $ c:"LINE") <*> argument auto (metavar $ c:"COL")
 
-maybeUnitId :: Parser (Maybe UnitId)
+maybeUnitId :: Parser (Maybe Unit)
 maybeUnitId =
-  optional (stringToUnitId <$> strOption (short 'u' <> long "unit-id" <> metavar "UNITID"))
+  optional (stringToUnit <$> strOption (short 'u' <> long "unit-id" <> metavar "UNITID"))
 
 symbolParser :: Parser Symbol
 symbolParser = argument auto $ metavar "SYMBOL"
@@ -299,7 +300,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
         putStr "\t"
         putStr $ moduleNameString $ modInfoName $ hieModInfo mod
         putStr "\t"
-        putStrLn $ unitIdString $ modInfoUnit $ hieModInfo mod
+        putStrLn $ unitString $ modInfoUnit $ hieModInfo mod
     Rm targets -> do
         forM_ targets $ \target -> do
           case target of
@@ -330,7 +331,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
             Nothing -> return $ Left (NotIndexed mn $ Just uid)
             Just x -> Right <$> putStrLn (hieModuleHieFile x)
     RefsAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
-      let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
+      let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo'
       when (null names) $
         reportAmbiguousErr opts (Left $ NoNameAtPoint target sp)
       forM_ names $ \name -> do
@@ -339,7 +340,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
           hPutStrLn stderr ""
         case nameModule_maybe name of
           Just mod -> do
-            reportRefs opts =<< findReferences conn False (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod) []
+            reportRefs opts =<< findReferences conn False (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnit mod) []
           Nothing -> do
             let refmap = generateReferencesMap (getAsts $ hie_asts hf)
                 refs = map (toRef . fst) $ M.findWithDefault [] (Right name) refmap
@@ -349,19 +350,19 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
                             ,Just $ Right (hie_hs_src hf))
             reportRefSpans opts refs
     TypesAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
-      let types' = concat $ pointCommand hf sp mep $ nodeType . nodeInfo
+      let types' = concat $ pointCommand hf sp mep $ nodeType . nodeInfo'
           types = map (flip recoverFullType $ hie_types hf) types'
       when (null types) $
         reportAmbiguousErr opts (Left $ NoNameAtPoint target sp)
       forM_ types $ \typ -> do
         putStrLn $ renderHieType dynFlags typ
     DefsAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
-      let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo
+      let names = concat $ pointCommand hf sp mep $ rights . M.keys . nodeIdentifiers . nodeInfo'
       when (null names) $
         reportAmbiguousErr opts (Left $ NoNameAtPoint target sp)
       forM_ names $ \name -> do
         case nameSrcSpan name of
-          RealSrcSpan dsp -> do
+          RealSrcSpan dsp _ -> do
             unless (quiet opts) $
               hPutStrLn stderr $ unwords ["Name", ppName opts (nameOccName name),"at",ppSpan opts sp,"is defined at:"]
             contents <- case nameModule_maybe name of
@@ -369,7 +370,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
               Just mod
                 | mod == hie_module hf -> pure $ Just $ Right $ hie_hs_src hf
                 | otherwise -> unsafeInterleaveIO $ do
-                    loc <- findOneDef conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
+                    loc <- findOneDef conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnit mod)
                     pure $ case loc of
                       Left _ -> Nothing
                       Right (row:._) -> Just $ Left $ defSrc row
@@ -384,7 +385,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
             case nameModule_maybe name of
               Just mod -> do
                 (row:.inf) <- reportAmbiguousErr opts
-                    =<< findOneDef conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnitId mod)
+                    =<< findOneDef conn (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnit mod)
                 unless (quiet opts) $
                   hPutStrLn stderr $ unwords ["Name", ppName opts (nameOccName name),"at",ppSpan opts sp,"is defined at:"]
                 reportRefSpans opts
@@ -394,10 +395,10 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
                    ,Just $ Left $ defSrc row
                    )]
               Nothing -> do
-                reportAmbiguousErr opts $ Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
+                reportAmbiguousErr opts $ Left $ NameUnhelpfulSpan name (FS.unpackFS $ unhelpfulSpanFS msg)
     InfoAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
-        (hieTypeToIface . flip recoverFullType (hie_types hf) <$> nodeInfo ast, nodeSpan ast)
+        (hieTypeToIface . flip recoverFullType (hie_types hf) <$> nodeInfo' ast, nodeSpan ast)
     RefGraph -> declRefs conn
     Dump path -> do
       nc <- newIORef =<< makeNc
@@ -450,13 +451,13 @@ showHieDbErr :: Options -> HieDbErr -> String
 showHieDbErr opts e = case e of
   NoNameAtPoint t spn -> unwords ["No symbols found at",ppSpan opts spn,"in",either id (\(mn,muid) -> ppMod opts mn ++ maybe "" (\uid -> "("++ppUnit opts uid++")") muid) t]
   NotIndexed mn muid -> unwords ["Module", ppMod opts mn ++ maybe "" (\uid -> "("++ppUnit opts uid++")") muid, "not indexed."]
-  AmbiguousUnitId xs -> unlines $ "UnitId could be any of:" : map ((" - "<>) . unitIdString . modInfoUnit) (toList xs)
+  AmbiguousUnitId xs -> unlines $ "Unit could be any of:" : map ((" - "<>) . unitString . modInfoUnit) (toList xs)
     <> ["Use --unit-id to disambiguate"]
   NameNotFound occ mn muid -> unwords
     ["Couldn't find name:", ppName opts occ, maybe "" (("from module " ++) . moduleNameString) mn ++ maybe "" (\uid ->"("++ppUnit opts uid++")") muid]
   NameUnhelpfulSpan nm msg -> unwords
     ["Got no helpful spans for:", occNameString (nameOccName nm), "\nMsg:", msg]
- 
+
 reportRefSpans :: Options -> [(Module,(Int,Int),(Int,Int),Maybe (Either FilePath BS.ByteString))] -> IO ()
 reportRefSpans opts xs = do
   nc <- newIORef =<< makeNc
@@ -530,7 +531,7 @@ ppName = colouredPP Red occNameString
 ppMod :: Options -> ModuleName -> String
 ppMod = colouredPP Green moduleNameString
 
-ppUnit :: Options -> UnitId -> String
+ppUnit :: Options -> Unit -> String
 ppUnit = colouredPP Yellow show
 
 ppSpan :: Options -> (Int,Int) -> String
