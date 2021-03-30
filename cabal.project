@@ -1,0 +1,3 @@
+packages: . 
+-- package hiedb
+--   ghc-options: -fwrite-ide-info -hiedir /home/zubin/hiedb/.hie/
