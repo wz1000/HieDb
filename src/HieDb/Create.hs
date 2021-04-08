@@ -60,7 +60,7 @@ checkVersion k db@(getConn -> conn) = do
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
 withHieDb fp f = withConnection fp (checkVersion f . HieDb)
 
-{-| Given GHC LibDir and path to @.hiedb@ file, 
+{-| Given GHC LibDir and path to @.hiedb@ file,
 constructs DynFlags (required for printing info from @.hie@ files)
 and 'HieDb' and passes them to given function.
 -}
@@ -150,7 +150,7 @@ initConn (getConn -> conn) = do
   execute_ conn "CREATE INDEX IF NOT EXISTS typerefs_mod ON typerefs(hieFile)"
 
 {-| Add names of types from @.hie@ file to 'HieDb'.
-Returns an Array mapping 'TypeIndex' to database ID assigned to the 
+Returns an Array mapping 'TypeIndex' to database ID assigned to the
 corresponding record in DB.
 -}
 addArr :: HieDb -> A.Array TypeIndex HieTypeFlat -> IO (A.Array TypeIndex (Maybe Int64))
@@ -214,8 +214,29 @@ addRefsFromLoaded
   -> Fingerprint -- ^ The hash of the @.hie@ file
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> m ()
-addRefsFromLoaded db@(getConn -> conn) path sourceFile hash hf = liftIO $ withTransaction conn $ do
-  deleteInternalTables conn path
+addRefsFromLoaded
+  db@(getConn -> conn) path sourceFile hash hf =
+    liftIO $ withTransaction conn $ do
+      deleteInternalTables conn path
+      addRefsFromLoaded_unsafe db path sourceFile hash hf
+
+-- | Like 'addRefsFromLoaded' but without:
+--   1) using a transaction
+--   2) cleaning up previous versions of the file
+--
+--   Mostly useful to index a new database from scratch as fast as possible
+addRefsFromLoaded_unsafe
+  :: MonadIO m
+  => HieDb -- ^ HieDb into which we're adding the file
+  -> FilePath -- ^ Path to @.hie@ file
+  -> SourceFile -- ^ Path to .hs file from which @.hie@ file was created
+                -- Also tells us if this is a real source file?
+                -- i.e. does it come from user's project (as opposed to from project's dependency)?
+  -> Fingerprint -- ^ The hash of the @.hie@ file
+  -> HieFile -- ^ Data loaded from the @.hie@ file
+  -> m ()
+addRefsFromLoaded_unsafe
+ db@(getConn -> conn) path sourceFile hash hf = liftIO $ do
 
   let isBoot = "boot" `isSuffixOf` path
       mod    = moduleName smod
@@ -243,7 +264,7 @@ addRefsFromLoaded db@(getConn -> conn) path sourceFile hash hf = liftIO $ withTr
 No action is taken if the corresponding @.hie@ file has not been indexed yet.
 -}
 addSrcFile
-  :: HieDb 
+  :: HieDb
   -> FilePath -- ^ Path to @.hie@ file
   -> FilePath -- ^ Path to .hs file to be added to DB
   -> Bool -- ^ Is this a real source file? I.e. does it come from user's project (as opposed to from project's dependency)?
