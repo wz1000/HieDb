@@ -220,7 +220,11 @@ addRefsFromLoaded
       deleteInternalTables conn path
       addRefsFromLoaded_unsafe db path sourceFile hash hf
 
--- | Like 'addRefsFromLoaded' but without using a transaction
+-- | Like 'addRefsFromLoaded' but without:
+--   1) using a transaction
+--   2) cleaning up previous versions of the file
+--
+--   Mostly useful to index a new database from scratch as fast as possible
 addRefsFromLoaded_unsafe
   :: MonadIO m
   => HieDb -- ^ HieDb into which we're adding the file
