@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 module Main where
 
-import GHC.Paths (libdir)
+import GHC.Paths (libdir, ghc)
 import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb, withHieFile, addRefsFromLoaded, deleteMissingRealFiles)
 import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFileFromSource)
 import HieDb.Run (Command (..), Options (..), runCommand)
@@ -305,7 +305,7 @@ cleanTestData = removeDirectoryRecursive testTmp
 
 runGhc :: [String] -> IO ()
 runGhc args = do
-  hc <- fromMaybe "ghc" <$> lookupEnv "HC"
+  hc <- fromMaybe ghc <$> lookupEnv "HC"
   callProcess hc args
 
 compileTestModules :: IO ()
