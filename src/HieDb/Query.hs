@@ -12,7 +12,7 @@ import qualified Algebra.Graph.Export.Dot as G
 
 import           GHC
 import           Compat.HieTypes
-import           Module
+-- import           Module
 import           Name
 
 import           System.Directory
@@ -33,6 +33,7 @@ import           Data.IORef
 import Database.SQLite.Simple
 
 import           HieDb.Dump (sourceCode)
+import           HieDb.Compat
 import           HieDb.Types
 import           HieDb.Utils
 import qualified HieDb.Html as Html
@@ -41,11 +42,11 @@ import qualified HieDb.Html as Html
 getAllIndexedMods :: HieDb -> IO [HieModuleRow]
 getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
-{-| Lookup UnitId associated with given ModuleName.
+{-| Lookup Unit associated with given ModuleName.
 HieDbErr is returned if no module with given name has been indexed
 or if ModuleName is ambiguous (i.e. there are multiple packages containing module with given name)
 -}
-resolveUnitId :: HieDb -> ModuleName -> IO (Either HieDbErr UnitId)
+resolveUnitId :: HieDb -> ModuleName -> IO (Either HieDbErr Unit)
 resolveUnitId (getConn -> conn) mn = do
   luid <- query conn "SELECT mod, unit, is_boot, hs_src, is_real, hash FROM mods WHERE mod = ? and is_boot = 0" (Only mn)
   return $ case luid of
@@ -53,7 +54,7 @@ resolveUnitId (getConn -> conn) mn = do
     [x] -> Right $ modInfoUnit x
     (x:xs) -> Left $ AmbiguousUnitId $ x :| xs
 
-findReferences :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res RefRow]
+findReferences :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe Unit -> [FilePath] -> IO [Res RefRow]
 findReferences (getConn -> conn) isReal occ mn uid exclude =
   queryNamed conn thisQuery ([":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal] ++ excludedFields)
   where
@@ -65,8 +66,8 @@ findReferences (getConn -> conn) isReal occ mn uid exclude =
             \((NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
       <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
 
-{-| Lookup 'HieModule' row from 'HieDb' given its 'ModuleName' and 'UnitId' -}
-lookupHieFile :: HieDb -> ModuleName -> UnitId -> IO (Maybe HieModuleRow)
+{-| Lookup 'HieModule' row from 'HieDb' given its 'ModuleName' and 'Unit' -}
+lookupHieFile :: HieDb -> ModuleName -> Unit -> IO (Maybe HieModuleRow)
 lookupHieFile (getConn -> conn) mn uid = do
   files <- query conn "SELECT * FROM mods WHERE mod = ? AND unit = ? AND is_boot = 0" (mn, uid)
   case files of
@@ -89,7 +90,7 @@ lookupHieFileFromSource (getConn -> conn) fp = do
             ++ show fp ++ ". Entries: "
             ++ intercalate ", " (map (show . toRow) xs)
 
-findTypeRefs :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe UnitId -> [FilePath] -> IO [Res TypeRef]
+findTypeRefs :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe Unit -> [FilePath] -> IO [Res TypeRef]
 findTypeRefs (getConn -> conn) isReal occ mn uid exclude
   = queryNamed conn thisQuery ([":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal] ++ excludedFields)
   where
@@ -103,14 +104,14 @@ findTypeRefs (getConn -> conn) isReal occ mn uid exclude
       <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
       <> " ORDER BY typerefs.depth ASC"
 
-findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO [Res DefRow]
+findDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe Unit -> IO [Res DefRow]
 findDef conn occ mn uid
   = queryNamed (getConn conn) "SELECT defs.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
                               \FROM defs JOIN mods USING (hieFile) \
                               \WHERE occ = :occ AND (:mod IS NULL OR mod = :mod) AND (:unit IS NULL OR unit = :unit)"
                               [":occ" := occ,":mod" := mn, ":unit" := uid]
 
-findOneDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe UnitId -> IO (Either HieDbErr (Res DefRow))
+findOneDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe Unit -> IO (Either HieDbErr (Res DefRow))
 findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
   where
     wrap [x]    = Right x
@@ -126,7 +127,7 @@ searchDef conn cs
                          \LIMIT 200" (Only $ '_':cs++"%")
 
 {-| @withTarget db t f@ runs function @f@ with HieFile specified by HieTarget @t@.
-In case the target is given by ModuleName (and optionally UnitId) it is first resolved
+In case the target is given by ModuleName (and optionally Unit) it is first resolved
 from HieDb, which can lead to error if given file is not indexed/Module name is ambiguous.
 -}
 withTarget
@@ -151,7 +152,7 @@ withTarget conn target f = case target of
       nc <- newIORef =<< makeNc
       runDbM nc $ do
         Right <$> withHieFile fp' (return . f)
-  
+
 
 type Vertex = (String, String, String, Int, Int, Int, Int)
 
@@ -197,7 +198,7 @@ getVertices (getConn -> conn) ss = Set.toList <$> foldM f Set.empty ss
     one s = do
       let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
           m = moduleNameString $ moduleName $ symModule s
-          u = unitIdString (moduleUnitId $ symModule s)
+          u = unitString (moduleUnit $ symModule s)
       query conn "SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec \
                  \FROM decls JOIN mods USING (hieFile) \
                  \WHERE ( decls.occ = ? AND mods.mod = ? AND mods.unit = ? ) " (n, m, u)
@@ -224,9 +225,9 @@ getAnnotations db symbols = do
         m2 = foldl' (f Html.Unreachable) m1        us
     return m2
   where
-    f :: Html.Color 
-      -> Map FilePath (ModuleName, Set Html.Span) 
-      -> Vertex 
+    f :: Html.Color
+      -> Map FilePath (ModuleName, Set Html.Span)
+      -> Vertex
       -> Map FilePath (ModuleName, Set Html.Span)
     f c m v =
         let (fp, mod', sp) = g c v

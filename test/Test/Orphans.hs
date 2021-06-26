@@ -2,8 +2,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.Orphans where
 
+import HieDb.Compat
 import HieDb.Types
-import Module (ModuleName, moduleName, moduleNameString, moduleUnitId)
+import Module (ModuleName, moduleName, moduleNameString)
 import Name (Name, nameModule, nameOccName)
 import OccName (OccName, occNameString)
 
@@ -14,7 +15,7 @@ instance Show Name where
     let occ = nameOccName n
         mod' = nameModule n
         mn = moduleName mod'
-        uid = moduleUnitId mod'
+        uid = moduleUnit mod'
     in show uid <> ":" <> show mn <> ":" <> show occ
 
 deriving instance Show HieDbErr

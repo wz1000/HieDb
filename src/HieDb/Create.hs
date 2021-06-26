@@ -32,8 +32,10 @@ import System.Directory
 
 import Database.SQLite.Simple
 
+import HieDb.Compat
 import HieDb.Types
 import HieDb.Utils
+import FastString  as FS      ( FastString )
 
 sCHEMA_VERSION :: Integer
 sCHEMA_VERSION = 5
@@ -166,7 +168,7 @@ addArr (getConn -> conn) arr = do
       Just m -> do
         let occ = nameOccName n
             mod = moduleName m
-            uid = moduleUnitId m
+            uid = moduleUnit m
         execute conn "INSERT INTO typenames(name,mod,unit) VALUES (?,?,?)" (occ,mod,uid)
         Just . fromOnly . head <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
 
@@ -179,7 +181,9 @@ addTypeRefs
   -> IO ()
 addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
   where
+    arr :: A.Array TypeIndex HieTypeFlat
     arr = hie_types hf
+    asts :: M.Map FS.FastString (HieAST TypeIndex)
     asts = getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
@@ -187,7 +191,7 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
         $ mapMaybe (\x -> guard (any (not . isOccurrence) (identInfo x)) *> identType x)
         $ M.elems
         $ nodeIdentifiers
-        $ nodeInfo ast
+        $ nodeInfo' ast
       mapM_ addTypesFromAst $ nodeChildren ast
 
 {-| Adds all references from given @.hie@ file to 'HieDb'.
@@ -240,7 +244,7 @@ addRefsFromLoaded_unsafe
 
   let isBoot = "boot" `isSuffixOf` path
       mod    = moduleName smod
-      uid    = moduleUnitId smod
+      uid    = moduleUnit smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
       (srcFile, isReal) = case sourceFile of

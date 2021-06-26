@@ -45,6 +45,7 @@ import Data.Monoid
 import Data.IORef
 
 import HieDb.Types
+import HieDb.Compat
 import Database.SQLite.Simple
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
@@ -71,7 +72,11 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 #endif
         HTyConApp _ (HieArgs xs) -> mapM_ (next . snd) xs
         HForAllTy ((_ , a),_) b -> mapM_ next [a,b]
+#if __GLASGOW_HASKELL__ >= 900
+        HFunTy a b c -> mapM_ next [a,b,c]
+#else
         HFunTy a b -> mapM_ next [a,b]
+#endif
         HQualTy a b -> mapM_ next [a,b]
         HLitTy _ -> pure ()
         HCastTy a -> go d a
@@ -115,9 +120,13 @@ findDefInFile occ mdl file = do
   nc <- readIORef ncr
   return $ case lookupOrigNameCache (nsNames nc) mdl occ of
     Just name -> case nameSrcSpan name of
+#if __GLASGOW_HASKELL__ >= 900
+      RealSrcSpan sp _ -> Right (sp, mdl)
+#else
       RealSrcSpan sp -> Right (sp, mdl)
-      UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (FS.unpackFS msg)
-    Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnitId mdl)
+#endif
+      UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (FS.unpackFS $ unhelpfulSpanFS msg)
+    Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnit mdl)
 
 pointCommand :: HieFile -> (Int, Int) -> Maybe (Int, Int) -> (HieAST TypeIndex -> a) -> [a]
 pointCommand hf (sl,sc) mep k =
@@ -158,7 +167,7 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
 
     goRef (Right name, (sp,_))
       | Just mod <- nameModule_maybe name = Just $
-          RefRow path occ (moduleName mod) (moduleUnitId mod) sl sc el ec
+          RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec
           where
             occ = nameOccName name
             sl = srcSpanStartLine sp
@@ -198,7 +207,11 @@ genDefRow path smod refmap = genRows $ M.toList refmap
   where
     genRows = mapMaybe go
     getSpan name dets
+#if __GLASGOW_HASKELL__ >= 900
+      | RealSrcSpan sp _ <- nameSrcSpan name = Just sp
+#else
       | RealSrcSpan sp <- nameSrcSpan name = Just sp
+#endif
       | otherwise = do
           (sp, _dets) <- find defSpan dets
           pure sp
@@ -222,8 +235,8 @@ genDefRow path smod refmap = genRows $ M.toList refmap
     go _ = Nothing
 
 identifierTree :: HieTypes.HieAST a -> Data.Tree.Tree ( HieTypes.HieAST a )
-identifierTree HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren } =
+identifierTree nd@HieTypes.Node{ nodeChildren } =
   Data.Tree.Node
-    { rootLabel = HieTypes.Node{ nodeInfo, nodeSpan, nodeChildren = mempty }
+    { rootLabel = nd { nodeChildren = mempty }
     , subForest = map identifierTree nodeChildren
     }
