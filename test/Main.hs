@@ -280,7 +280,7 @@ cliSpec =
 
       it "shows all the exports" $ do
         cwd <- getCurrentDirectory
-        runHieDbCli ["ls-exports"] `succeedsWithStdin` unlines
+        runHieDbCli ["ls-exports"] `succeedsWithStdinSorted` unlines
           (fmap (\x -> cwd </> testTmp </> x)
           [ "Module1.hie\tfunction1"
           , "Module1.hie\tfunction2"
@@ -305,6 +305,12 @@ succeedsWithStdin action expectedStdin = do
   exitCode `shouldBe` ExitSuccess
   actualStdin `shouldBe` expectedStdin
 
+
+succeedsWithStdinSorted :: IO (ExitCode, String, String) -> String -> Expectation
+succeedsWithStdinSorted action expectedStdin = do
+  (exitCode, actualStdin, _actualStdErr) <- action
+  exitCode `shouldBe` ExitSuccess
+  sort (lines actualStdin) `shouldBe` sort (lines expectedStdin)
 
 runHieDbCli :: [String] -> IO (ExitCode, String, String)
 runHieDbCli args = do
