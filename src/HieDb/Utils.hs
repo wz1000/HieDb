@@ -264,5 +264,5 @@ generateExports fp = concatMap generateExport where
         , exportName = occ
         , exportParent = Just (nameOccName name)
         , exportIsDatacon = False}
-      | occ <- map nameOccName (tail pieces) <> map (mkVarOccFS . flLabel) fields
+      | occ <- map nameOccName (drop 1 pieces) <> map (mkVarOccFS . flLabel) fields
       ]
