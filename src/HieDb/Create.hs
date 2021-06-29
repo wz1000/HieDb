@@ -95,6 +95,7 @@ initConn (getConn -> conn) = do
   execute_ conn "CREATE TABLE IF NOT EXISTS exports \
                 \( hieFile TEXT NOT NULL \
                 \, occ     TEXT NOT NULL \
+                \, mod     TEXT NOT NULL \
                 \, parent  TEXT \
                 \, is_datacon BOOL NOT NULL \
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \

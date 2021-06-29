@@ -219,16 +219,17 @@ instance FromRow DefRow where
                    <*> field <*> field
 
 data ExportRow = ExportRow
-  { exportHieFile :: FilePath
+  { exportHieFile :: FilePath -- ^ Exporting module
   , exportName :: OccName
+  , exportMod :: ModuleName -- ^ Definition module
   , exportParent :: Maybe OccName
   , exportIsDatacon :: Bool
   }
 instance ToRow ExportRow where
-  toRow (ExportRow a b c d) = toRow (a,b,c,d)
+  toRow (ExportRow a b c d e) = toRow (a,b,c,d,e)
 
 instance FromRow ExportRow where
-  fromRow = ExportRow <$> field <*> field <*> field <*> field
+  fromRow = ExportRow <$> field <*> field <*> field <*> field <*> field
 
 {-| Monad with access to 'NameCacheUpdater', which is needed to deserialize @.hie@ files -}
 class Monad m => NameCacheMonad m where
