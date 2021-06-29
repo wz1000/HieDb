@@ -282,12 +282,12 @@ cliSpec =
         cwd <- getCurrentDirectory
         runHieDbCli ["ls-exports"] `succeedsWithStdin` unlines
           (fmap (\x -> cwd </> testTmp </> x)
-          [ "Sub/Module2.hie\tshowInt"
+          [ "Module1.hie\tfunction1"
+          , "Module1.hie\tfunction2"
+          , "Sub/Module2.hie\tshowInt"
           , "Sub/Module2.hie\tData1"
           , "Sub/Module2.hie\tData1(Data1Constructor1)"
           , "Sub/Module2.hie\tData1(Data1Constructor2)"
-          , "Module1.hie\tfunction1"
-          , "Module1.hie\tfunction2"
           ])
 
     describe "rm" $
