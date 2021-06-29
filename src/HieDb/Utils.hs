@@ -251,6 +251,7 @@ generateExports fp = concatMap generateExport where
         { exportHieFile = fp
         , exportName = nameOccName n
         , exportMod = moduleName $ nameModule n
+        , exportUnit = moduleUnit $ nameModule n
         , exportParent = Nothing
         , exportIsDatacon = False
         }]
@@ -259,12 +260,14 @@ generateExports fp = concatMap generateExport where
         { exportHieFile = fp
         , exportName = nameOccName name
         , exportMod = moduleName $ nameModule name
+        , exportUnit = moduleUnit $ nameModule name
         , exportParent = Nothing
         , exportIsDatacon = False}
     : [ExportRow
         { exportHieFile = fp
         , exportName = occ
         , exportMod = moduleName $ nameModule name
+        , exportUnit = moduleUnit $ nameModule name
         , exportParent = Just (nameOccName name)
         , exportIsDatacon = False}
       | occ <- map nameOccName (drop 1 pieces) <> map (mkVarOccFS . flLabel) fields

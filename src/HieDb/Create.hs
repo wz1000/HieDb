@@ -96,6 +96,7 @@ initConn (getConn -> conn) = do
                 \( hieFile TEXT NOT NULL \
                 \, occ     TEXT NOT NULL \
                 \, mod     TEXT NOT NULL \
+                \, unit    TEXT NOT NULL \
                 \, parent  TEXT \
                 \, is_datacon BOOL NOT NULL \
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
@@ -272,7 +273,7 @@ addRefsFromLoaded_unsafe
   executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" defs
 
   let exports = generateExports path $ hie_exports hf
-  executeMany conn "INSERT INTO exports VALUES (?,?,?,?,?)" exports
+  executeMany conn "INSERT INTO exports VALUES (?,?,?,?,?,?)" exports
 
   ixs <- addArr db (hie_types hf)
   addTypeRefs db path hf ixs

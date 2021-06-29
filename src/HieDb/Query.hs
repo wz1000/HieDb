@@ -52,9 +52,9 @@ getExportsForModule (getConn -> conn) mn =
   query conn "SELECT exports.* FROM exports JOIN mods USING (hieFile) WHERE mods.mod = ?" (Only mn)
 
 {-| Find all the modules that export an identifier |-}
-findExporters :: HieDb -> OccName -> ModuleName -> IO [ModuleName]
-findExporters (getConn -> conn) occ mn =
-  query conn "SELECT mods.mod FROM exports JOIN mods USING (hieFile) WHERE occ = ? AND mod = ?" (occ, mn)
+findExporters :: HieDb -> OccName -> ModuleName -> Unit -> IO [ModuleName]
+findExporters (getConn -> conn) occ mn unit =
+  query conn "SELECT mods.mod FROM exports JOIN mods USING (hieFile) WHERE occ = ? AND mod = ? AND unit = ?" (occ, mn, unit)
 
 {-| Lookup Unit associated with given ModuleName.
 HieDbErr is returned if no module with given name has been indexed

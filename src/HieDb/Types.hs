@@ -222,14 +222,15 @@ data ExportRow = ExportRow
   { exportHieFile :: FilePath -- ^ Exporting module
   , exportName :: OccName
   , exportMod :: ModuleName -- ^ Definition module
+  , exportUnit :: Unit
   , exportParent :: Maybe OccName
   , exportIsDatacon :: Bool
   }
 instance ToRow ExportRow where
-  toRow (ExportRow a b c d e) = toRow (a,b,c,d,e)
+  toRow (ExportRow a b c d e f) = toRow (a,b,c,d,e,f)
 
 instance FromRow ExportRow where
-  fromRow = ExportRow <$> field <*> field <*> field <*> field <*> field
+  fromRow = ExportRow <$> field <*> field <*> field <*> field <*> field <*> field
 
 {-| Monad with access to 'NameCacheUpdater', which is needed to deserialize @.hie@ files -}
 class Monad m => NameCacheMonad m where
