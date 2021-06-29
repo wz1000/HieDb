@@ -47,6 +47,8 @@ import Data.IORef
 import HieDb.Types
 import HieDb.Compat
 import Database.SQLite.Simple
+import Avail
+import DataCon (flLabel)
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
@@ -240,3 +242,27 @@ identifierTree nd@HieTypes.Node{ nodeChildren } =
     { rootLabel = nd { nodeChildren = mempty }
     , subForest = map identifierTree nodeChildren
     }
+
+generateExports :: FilePath -> [AvailInfo] -> [ExportRow]
+generateExports fp = concatMap generateExport where
+  generateExport :: AvailInfo -> [ExportRow]
+  generateExport (Avail n)
+    = [ExportRow
+        { exportHieFile = fp
+        , exportName = nameOccName n
+        , exportParent = Nothing
+        , exportIsDatacon = False
+        }]
+  generateExport (AvailTC name pieces fields)
+    = ExportRow
+        { exportHieFile = fp
+        , exportName = nameOccName name
+        , exportParent = Nothing
+        , exportIsDatacon = False}
+    : [ExportRow
+        { exportHieFile = fp
+        , exportName = occ
+        , exportParent = Just (nameOccName name)
+        , exportIsDatacon = False}
+      | occ <- map nameOccName (tail pieces) <> map (mkVarOccFS . flLabel) fields
+      ]

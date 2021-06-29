@@ -42,6 +42,15 @@ import qualified HieDb.Html as Html
 getAllIndexedMods :: HieDb -> IO [HieModuleRow]
 getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
+{-| List all module exports -}
+getAllIndexedExports :: HieDb -> IO [(ExportRow)]
+getAllIndexedExports (getConn -> conn) = query_ conn "SELECT * FROM exports"
+
+{-| List all exports of the given module -}
+getExportsForModule :: HieDb -> ModuleName -> IO [ExportRow]
+getExportsForModule (getConn -> conn) mn =
+  query conn "SELECT exports.* FROM exports JOIN mods USING (hieFile) WHERE mods.mod = ?" (Only mn)
+
 {-| Lookup Unit associated with given ModuleName.
 HieDbErr is returned if no module with given name has been indexed
 or if ModuleName is ambiguous (i.e. there are multiple packages containing module with given name)
