@@ -82,6 +82,9 @@ instance ToField ModuleName where
 instance FromField ModuleName where
   fromField fld = mkModuleName . T.unpack <$> fromField fld
 
+instance FromRow ModuleName where
+  fromRow = field
+
 instance ToField Unit where
   toField uid = SQLText $ T.pack $ unitString uid
 instance FromField Unit where
