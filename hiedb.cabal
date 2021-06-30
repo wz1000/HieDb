@@ -71,7 +71,8 @@ library
                      , extra
                      , ansi-terminal
                      , terminal-size
-                     , ghc-api-compat
+  if impl(ghc >= 9.0)
+    build-depends: ghc-api-compat
 
 test-suite hiedb-tests
   import:             common-options
@@ -88,4 +89,5 @@ test-suite hiedb-tests
                     , hspec
                     , process
                     , temporary
-                    , ghc-api-compat
+  if impl(ghc >= 9.0)
+    build-depends: ghc-api-compat

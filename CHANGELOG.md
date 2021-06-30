@@ -4,6 +4,10 @@
 
 * Index module exports
 * New queries `getAllIndexedExports`, `getExportsForModule`, and `findExporters`
+* Support for ghc-9.0
+* An new `addRefsFromLoaded_unsafe` to index a module with cleanup or transactional behaviour
+* Include test data in source tarball
+* Use terminal-size for printing in some cases, making verbose indexing faster in some cases
 
 ## 0.3.0.1 -- 2021-01-27
 
