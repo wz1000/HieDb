@@ -269,12 +269,24 @@ generateExports fp = concatMap generateExport where
         , exportIsDatacon = False}
     : [ExportRow
         { exportHieFile = fp
-        , exportName = occ
-        , exportMod = moduleName $ nameModule name
-        , exportUnit = moduleUnit $ nameModule name
+        , exportName = n
+        , exportMod = m
+        , exportUnit = u
         , exportParent = Just (nameOccName name)
         , exportParentMod = Just (moduleName $ nameModule name)
         , exportParentUnit = Just (moduleUnit $ nameModule name)
         , exportIsDatacon = False}
-      | occ <- map nameOccName (drop 1 pieces) <> map (mkVarOccFS . flLabel) fields
+      | (n,m,u) <- map (\n ->
+                        (nameOccName n
+                        ,moduleName $ nameModule n
+                        ,moduleUnit $ nameModule n
+                        ))
+                      (drop 1 pieces)
+               <> map (\s ->
+                        (mkVarOccFS $ flLabel s
+                        -- For fields, the module details come from the parent
+                        ,moduleName $ nameModule name
+                        ,moduleUnit $ nameModule name
+                        ))
+                      fields
       ]
