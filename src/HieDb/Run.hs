@@ -4,6 +4,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
 module HieDb.Run where
 
 import Prelude hiding (mod)
@@ -50,6 +51,7 @@ import Options.Applicative
 import HieDb
 import HieDb.Compat
 import HieDb.Dump
+import Text.Printf (printf)
 
 hiedbMain :: LibDir -> IO ()
 hiedbMain libdir = do
@@ -93,6 +95,7 @@ data Command
   | TypeDef  String (Maybe ModuleName) (Maybe Unit)
   | Cat HieTarget
   | Ls
+  | LsExports (Maybe ModuleName)
   | Rm [HieTarget]
   | ModuleUIDs ModuleName
   | LookupHieFile ModuleName (Maybe Unit)
@@ -157,6 +160,8 @@ cmdParser
                          $ progDesc "Dump contents of MODULE as stored in the hiefile")
   <> command "ls" (info (pure Ls)
                          $ progDesc "List all indexed files/modules")
+  <> command "ls-exports" (info (LsExports <$> optional moduleNameParser)
+                         $ progDesc "List all exports")
   <> command "rm" (info (Rm <$> many hieTarget)
                          $ progDesc "Remove targets from index")
   <> command "module-uids" (info (ModuleUIDs <$> moduleNameParser)
@@ -301,6 +306,14 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
         putStr $ moduleNameString $ modInfoName $ hieModInfo mod
         putStr "\t"
         putStrLn $ unitString $ modInfoUnit $ hieModInfo mod
+    LsExports mn -> do
+      exports <- maybe (getAllIndexedExports conn) (getExportsForModule conn) mn
+      forM_ exports $ \ExportRow{..} -> do
+        putStr exportHieFile
+        putStr "\t"
+        case exportParent of
+          Nothing -> putStrLn $ occNameString exportName
+          Just p -> printf "%s(%s)\n" (occNameString p) (occNameString exportName)
     Rm targets -> do
         forM_ targets $ \target -> do
           case target of

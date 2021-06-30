@@ -82,6 +82,9 @@ instance ToField ModuleName where
 instance FromField ModuleName where
   fromField fld = mkModuleName . T.unpack <$> fromField fld
 
+instance FromRow ModuleName where
+  fromRow = field
+
 instance ToField Unit where
   toField uid = SQLText $ T.pack $ unitString uid
 instance FromField Unit where
@@ -215,6 +218,21 @@ instance FromRow DefRow where
   fromRow = DefRow <$> field <*> field <*> field <*> field
                    <*> field <*> field
 
+data ExportRow = ExportRow
+  { exportHieFile :: FilePath -- ^ Exporting module
+  , exportName :: OccName
+  , exportMod :: ModuleName -- ^ Definition module
+  , exportUnit :: Unit
+  , exportParent :: Maybe OccName
+  , exportParentMod :: Maybe ModuleName
+  , exportParentUnit :: Maybe Unit
+  , exportIsDatacon :: Bool
+  }
+instance ToRow ExportRow where
+  toRow (ExportRow a b c d e f g h) = toRow (a,b,c,d,e,f,g,h)
+
+instance FromRow ExportRow where
+  fromRow = ExportRow <$> field <*> field <*> field <*> field <*> field <*> field <*> field <*> field
 
 {-| Monad with access to 'NameCacheUpdater', which is needed to deserialize @.hie@ files -}
 class Monad m => NameCacheMonad m where

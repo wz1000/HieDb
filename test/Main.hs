@@ -269,6 +269,27 @@ cliSpec =
         runHieDbCli ["module-uids", "Module1"]
           `succeedsWithStdin` "main\n"
 
+    describe "ls-exports" $ do
+      it "shows exports for Module1" $ do
+        cwd <- getCurrentDirectory
+        runHieDbCli ["ls-exports", "Module1"] `succeedsWithStdin` unlines
+          (fmap (\x -> cwd </> testTmp </> x)
+          [ "Module1.hie\tfunction1"
+          , "Module1.hie\tfunction2"
+          ])
+
+      it "shows all the exports" $ do
+        cwd <- getCurrentDirectory
+        runHieDbCli ["ls-exports"] `succeedsWithStdinSorted` unlines
+          (fmap (\x -> cwd </> testTmp </> x)
+          [ "Module1.hie\tfunction1"
+          , "Module1.hie\tfunction2"
+          , "Sub/Module2.hie\tshowInt"
+          , "Sub/Module2.hie\tData1"
+          , "Sub/Module2.hie\tData1(Data1Constructor1)"
+          , "Sub/Module2.hie\tData1(Data1Constructor2)"
+          ])
+
     describe "rm" $
       it "removes given module from DB" $ do
         runHieDbCli ["rm", "Module1"]
@@ -278,13 +299,18 @@ cliSpec =
         runHieDbCli ["ls"] `succeedsWithStdin` (cwd </> testTmp </> "Sub/Module2.hie\tSub.Module2\tmain\n")
 
 
-
 succeedsWithStdin :: IO (ExitCode, String, String) -> String -> Expectation
 succeedsWithStdin action expectedStdin = do
   (exitCode, actualStdin, _actualStdErr) <- action
   exitCode `shouldBe` ExitSuccess
   actualStdin `shouldBe` expectedStdin
 
+
+succeedsWithStdinSorted :: IO (ExitCode, String, String) -> String -> Expectation
+succeedsWithStdinSorted action expectedStdin = do
+  (exitCode, actualStdin, _actualStdErr) <- action
+  exitCode `shouldBe` ExitSuccess
+  sort (lines actualStdin) `shouldBe` sort (lines expectedStdin)
 
 runHieDbCli :: [String] -> IO (ExitCode, String, String)
 runHieDbCli args = do

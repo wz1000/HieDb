@@ -47,6 +47,8 @@ import Data.IORef
 import HieDb.Types
 import HieDb.Compat
 import Database.SQLite.Simple
+import Avail
+import DataCon (flLabel)
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
@@ -240,3 +242,51 @@ identifierTree nd@HieTypes.Node{ nodeChildren } =
     { rootLabel = nd { nodeChildren = mempty }
     , subForest = map identifierTree nodeChildren
     }
+
+generateExports :: FilePath -> [AvailInfo] -> [ExportRow]
+generateExports fp = concatMap generateExport where
+  generateExport :: AvailInfo -> [ExportRow]
+  generateExport (Avail n)
+    = [ExportRow
+        { exportHieFile = fp
+        , exportName = nameOccName n
+        , exportMod = moduleName $ nameModule n
+        , exportUnit = moduleUnit $ nameModule n
+        , exportParent = Nothing
+        , exportParentMod = Nothing
+        , exportParentUnit = Nothing
+        , exportIsDatacon = False
+        }]
+  generateExport (AvailTC name pieces fields)
+    = ExportRow
+        { exportHieFile = fp
+        , exportName = nameOccName name
+        , exportMod = moduleName $ nameModule name
+        , exportUnit = moduleUnit $ nameModule name
+        , exportParent = Nothing
+        , exportParentMod = Nothing
+        , exportParentUnit = Nothing
+        , exportIsDatacon = False}
+    : [ExportRow
+        { exportHieFile = fp
+        , exportName = n
+        , exportMod = m
+        , exportUnit = u
+        , exportParent = Just (nameOccName name)
+        , exportParentMod = Just (moduleName $ nameModule name)
+        , exportParentUnit = Just (moduleUnit $ nameModule name)
+        , exportIsDatacon = False}
+      | (n,m,u) <- map (\n ->
+                        (nameOccName n
+                        ,moduleName $ nameModule n
+                        ,moduleUnit $ nameModule n
+                        ))
+                      (drop 1 pieces)
+               <> map (\s ->
+                        (mkVarOccFS $ flLabel s
+                        -- For fields, the module details come from the parent
+                        ,moduleName $ nameModule name
+                        ,moduleUnit $ nameModule name
+                        ))
+                      fields
+      ]

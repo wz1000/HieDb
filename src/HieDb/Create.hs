@@ -38,7 +38,7 @@ import HieDb.Utils
 import FastString  as FS      ( FastString )
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 5
+sCHEMA_VERSION = 6
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
@@ -91,6 +91,19 @@ initConn (getConn -> conn) = do
                 \, CONSTRAINT real_has_src CHECK ( (NOT is_real) OR (hs_src IS NOT NULL) ) \
                 \)"
   execute_ conn "CREATE INDEX IF NOT EXISTS mod_hash ON mods(hieFile,hash)"
+
+  execute_ conn "CREATE TABLE IF NOT EXISTS exports \
+                \( hieFile TEXT NOT NULL \
+                \, occ     TEXT NOT NULL \
+                \, mod     TEXT NOT NULL \
+                \, unit    TEXT NOT NULL \
+                \, parent  TEXT \
+                \, parentMod TEXT \
+                \, parentUnit TEXT \
+                \, is_datacon BOOL NOT NULL \
+                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
+                \)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS exports_mod ON exports(hieFile)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS refs \
                 \( hieFile TEXT NOT NULL \
@@ -261,6 +274,9 @@ addRefsFromLoaded_unsafe
   let defs = genDefRow path smod refmap
   executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" defs
 
+  let exports = generateExports path $ hie_exports hf
+  executeMany conn "INSERT INTO exports VALUES (?,?,?,?,?,?,?,?)" exports
+
   ixs <- addArr db (hie_types hf)
   addTypeRefs db path hf ixs
 
@@ -309,3 +325,4 @@ deleteInternalTables conn path = do
   execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM typerefs WHERE hieFile = ?" (Only path)
   execute conn "DELETE FROM mods  WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM exports WHERE hieFile = ?" (Only path)

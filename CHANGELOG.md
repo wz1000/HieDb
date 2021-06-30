@@ -1,9 +1,14 @@
 # Revision history for hiedb
 
+## 0.4.0.0 -- 2021-06-29
+
+* Index module exports
+* New queries `getAllIndexedExports`, `getExportsForModule`, and `findExporters`
+
 ## 0.3.0.1 -- 2021-01-27
 
 * Add additional sqlite indexes to prevent accidently quadratic behaviour while indexing
-  
+
 ## 0.3.0.0 -- 2021-01-20
 
 * Introduce `SourceFile` type
