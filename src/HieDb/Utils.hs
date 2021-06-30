@@ -253,6 +253,8 @@ generateExports fp = concatMap generateExport where
         , exportMod = moduleName $ nameModule n
         , exportUnit = moduleUnit $ nameModule n
         , exportParent = Nothing
+        , exportParentMod = Nothing
+        , exportParentUnit = Nothing
         , exportIsDatacon = False
         }]
   generateExport (AvailTC name pieces fields)
@@ -262,6 +264,8 @@ generateExports fp = concatMap generateExport where
         , exportMod = moduleName $ nameModule name
         , exportUnit = moduleUnit $ nameModule name
         , exportParent = Nothing
+        , exportParentMod = Nothing
+        , exportParentUnit = Nothing
         , exportIsDatacon = False}
     : [ExportRow
         { exportHieFile = fp
@@ -269,6 +273,8 @@ generateExports fp = concatMap generateExport where
         , exportMod = moduleName $ nameModule name
         , exportUnit = moduleUnit $ nameModule name
         , exportParent = Just (nameOccName name)
+        , exportParentMod = Just (moduleName $ nameModule name)
+        , exportParentUnit = Just (moduleUnit $ nameModule name)
         , exportIsDatacon = False}
       | occ <- map nameOccName (drop 1 pieces) <> map (mkVarOccFS . flLabel) fields
       ]
