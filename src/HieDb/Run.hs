@@ -12,11 +12,6 @@ import Prelude hiding (mod)
 import GHC
 import Compat.HieTypes
 import Compat.HieUtils
-import Name
-import Outputable ((<+>),hang,showSDoc,ppr,text)
-import IfaceType (IfaceType)
-
-import qualified FastString as FS
 
 import qualified Data.Map as M
 
@@ -412,7 +407,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
                    ,Just $ Left $ defSrc row
                    )]
               Nothing -> do
-                reportAmbiguousErr opts $ Left $ NameUnhelpfulSpan name (FS.unpackFS $ unhelpfulSpanFS msg)
+                reportAmbiguousErr opts $ Left $ NameUnhelpfulSpan name (unpackFS $ unhelpfulSpanFS msg)
     InfoAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
         (hieTypeToIface . flip recoverFullType (hie_types hf) <$> nodeInfo' ast, nodeSpan ast)

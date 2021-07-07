@@ -12,9 +12,6 @@ import Compat.HieTypes
 import Compat.HieUtils
 
 import GHC
-import IfaceType
-import Name
-import GHC.Fingerprint
 
 import Control.Exception
 import Control.Monad
@@ -32,10 +29,9 @@ import System.Directory
 
 import Database.SQLite.Simple
 
-import HieDb.Compat
+import HieDb.Compat as Compat
 import HieDb.Types
 import HieDb.Utils
-import FastString  as FS      ( FastString )
 
 sCHEMA_VERSION :: Integer
 sCHEMA_VERSION = 6
@@ -196,7 +192,7 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
   where
     arr :: A.Array TypeIndex HieTypeFlat
     arr = hie_types hf
-    asts :: M.Map FS.FastString (HieAST TypeIndex)
+    asts :: M.Map HiePath (HieAST TypeIndex)
     asts = getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
