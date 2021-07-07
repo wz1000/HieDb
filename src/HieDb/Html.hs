@@ -14,7 +14,8 @@ import           Data.List (foldl', sortBy)
 import           Data.Text   (Text)
 import qualified Data.Text as T
 import           Lucid
-import           Module
+
+import           HieDb.Compat
 
 generate :: FilePath -> ModuleName -> [Text] -> [Span] -> IO ()
 generate fp mn ts sps = renderToFile fp $ doctypehtml_ $ do

@@ -12,8 +12,6 @@ import qualified Algebra.Graph.Export.Dot as G
 
 import           GHC
 import           Compat.HieTypes
--- import           Module
-import           Name
 
 import           System.Directory
 import           System.FilePath
@@ -30,7 +28,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import           Data.IORef
 
-import Database.SQLite.Simple
+import           Database.SQLite.Simple
 
 import           HieDb.Dump (sourceCode)
 import           HieDb.Compat
