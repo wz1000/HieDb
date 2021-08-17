@@ -11,12 +11,6 @@ module HieDb.Types where
 
 import Prelude hiding (mod)
 
-import Name
-import Module
-import NameCache
-import Fingerprint
-
-import IfaceEnv (NameCacheUpdater(..))
 import Data.IORef
 
 import qualified Data.Text as T

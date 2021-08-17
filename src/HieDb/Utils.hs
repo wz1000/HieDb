@@ -17,17 +17,8 @@ import Compat.HieBin
 import Compat.HieTypes
 import qualified Compat.HieTypes as HieTypes
 import Compat.HieUtils
-import Name
-import Module
-import NameCache
-import UniqSupply
-import SrcLoc
-import DynFlags
-import SysTools
-
 import qualified Data.Map as M
 
-import qualified FastString as FS
 
 import System.Directory
 import System.FilePath
@@ -47,8 +38,6 @@ import Data.IORef
 import HieDb.Types
 import HieDb.Compat
 import Database.SQLite.Simple
-import Avail
-import DataCon (flLabel)
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
@@ -127,13 +116,13 @@ findDefInFile occ mdl file = do
 #else
       RealSrcSpan sp -> Right (sp, mdl)
 #endif
-      UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (FS.unpackFS $ unhelpfulSpanFS msg)
+      UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (unpackFS $ unhelpfulSpanFS msg)
     Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnit mdl)
 
 pointCommand :: HieFile -> (Int, Int) -> Maybe (Int, Int) -> (HieAST TypeIndex -> a) -> [a]
 pointCommand hf (sl,sc) mep k =
     M.elems $ flip M.mapMaybeWithKey (getAsts $ hie_asts hf) $ \fs ast ->
-      k <$> selectSmallestContaining (sp fs) ast
+      k <$> selectSmallestContaining (sp $ hiePathToFS fs) ast
  where
    sloc fs = mkRealSrcLoc fs sl sc
    eloc fs = case mep of
@@ -246,7 +235,7 @@ identifierTree nd@HieTypes.Node{ nodeChildren } =
 generateExports :: FilePath -> [AvailInfo] -> [ExportRow]
 generateExports fp = concatMap generateExport where
   generateExport :: AvailInfo -> [ExportRow]
-  generateExport (Avail n)
+  generateExport (AvailName n)
     = [ExportRow
         { exportHieFile = fp
         , exportName = nameOccName n
@@ -257,6 +246,23 @@ generateExports fp = concatMap generateExport where
         , exportParentUnit = Nothing
         , exportIsDatacon = False
         }]
+  generateExport (AvailFL fl)
+    = [ExportRow
+        { exportHieFile = fp
+        , exportName = n
+        , exportMod = m
+        , exportUnit = u
+        , exportParent = Nothing
+        , exportParentMod = Nothing
+        , exportParentUnit = Nothing
+        , exportIsDatacon = False
+        }]
+      where
+        (n, m, u) = (mkVarOccFS $ flLabel fl
+                    -- For fields, the module details come from the parent
+                    ,moduleName $ nameModule $ flSelector fl
+                    ,moduleUnit $ nameModule $ flSelector fl
+                    )
   generateExport (AvailTC name pieces fields)
     = ExportRow
         { exportHieFile = fp

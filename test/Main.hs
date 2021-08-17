@@ -7,8 +7,7 @@ import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFi
 import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..), SourceFile(..), runDbM)
 import HieDb.Utils (makeNc)
-import HieDb.Compat (stringToUnit)
-import Module (mkModuleName, moduleNameString)
+import HieDb.Compat (stringToUnit, moduleNameString, mkModuleName, getFileHash)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
 import System.Exit (ExitCode (..), die)
 import System.FilePath ((</>))
@@ -19,7 +18,6 @@ import System.IO
 import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, runIO,
                    shouldBe, shouldEndWith)
 import Test.Orphans ()
-import GHC.Fingerprint
 import Data.IORef
 import Data.List (sort)
 import Data.Maybe (fromMaybe)
@@ -216,7 +214,9 @@ cliSpec =
         runHieDbCli ["point-info", "Module1", "10", "10"]
           `succeedsWithStdin` unlines
             [ "Span: test/data/Module1.hs:10:8-11"
-#if __GLASGOW_HASKELL__ >= 900
+#if __GLASGOW_HASKELL__ >= 902
+            , "Constructors: {(XExpr, HsExpr), (HsVar, HsExpr)}"
+#elif __GLASGOW_HASKELL__ >= 900
             , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
 #else
             , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
