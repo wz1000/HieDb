@@ -1,5 +1,10 @@
 # Revision history for hiedb
 
+## 0.4.1.0 -- 2021-06-29
+
+* Support GHC 9.2 (@fendor)
+* Remove `ghc-api-compat` dependency (@fendor)
+
 ## 0.4.0.0 -- 2021-06-29
 
 * Index module exports
