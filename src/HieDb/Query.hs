@@ -53,6 +53,28 @@ findExporters :: HieDb -> OccName -> ModuleName -> Unit -> IO [ModuleName]
 findExporters (getConn -> conn) occ mn unit =
   query conn "SELECT mods.mod FROM exports JOIN mods USING (hieFile) WHERE occ = ? AND mod = ? AND unit = ?" (occ, mn, unit)
 
+-- | Recursively find all the places where this symbol is (transitively) called
+findRecursiveCalls :: HieDb -> OccName -> Maybe ModuleName -> Maybe Unit -> IO [(OccName,Maybe ModuleName,Maybe Unit,Maybe OccName, Maybe ModuleName, (Maybe Int, Maybe Int, Maybe Int, Maybe Int))]
+findRecursiveCalls (getConn -> conn) occ mn unit =
+  fmap (\(x1,x2,x3,x4,x5,x6,x7,x8,x9) -> (x1,x2,x3,x4,x5,(x6,x7,x8,x9))) <$>
+  queryNamed conn
+    "WITH RECURSIVE \
+    \  calls(occ,mod,unit,cocc,cmod,sl,sc,el,ec) AS ( \
+    \    VALUES (:occ,:mod,:unit,NULL,NULL,NULL,NULL,NULL,NULL) \
+    \    UNION \
+    \    SELECT decls.occ, mods.mod, mods.unit, refs.occ, refs.mod, refs.sl, refs.sc, refs.el, refs.ec \
+    \    FROM calls \
+    \    JOIN refs  ON refs.occ = calls.occ AND (calls.mod  IS NULL OR refs.mod  = calls.mod) \
+                                           \AND (calls.unit IS NULL OR refs.unit = calls.unit)\
+    \    JOIN decls ON decls.hieFile = refs.hieFile AND ((refs.sl = decls.sl AND refs.sc >  decls.sc) OR (refs.sl > decls.sl)) \
+                                                   \AND ((refs.el = decls.el AND refs.ec <= decls.ec) OR (refs.el < decls.el)) \
+    \    JOIN mods ON mods.hieFile = decls.hieFile \
+    \    WHERE \
+    \    (decls.occ != calls.occ OR (calls.mod IS NOT NULL AND mods.mod != calls.mod) OR (calls.unit IS NOT NULL or mods.unit != calls.unit)) \
+    \  ) \
+    \SELECT * FROM calls;"
+    [":occ" := occ, ":mod" := mn, ":unit" := unit]
+
 {-| Lookup Unit associated with given ModuleName.
 HieDbErr is returned if no module with given name has been indexed
 or if ModuleName is ambiguous (i.e. there are multiple packages containing module with given name)

@@ -90,6 +90,7 @@ data Command
   | NameRefs String (Maybe ModuleName) (Maybe Unit)
   | TypeRefs String (Maybe ModuleName) (Maybe Unit)
   | NameDef  String (Maybe ModuleName) (Maybe Unit)
+  | NameCalls String (Maybe ModuleName) (Maybe Unit)
   | TypeDef  String (Maybe ModuleName) (Maybe Unit)
   | Cat HieTarget
   | Ls
@@ -169,6 +170,10 @@ cmdParser
                                        <*> optional moduleNameParser
                                        <*> maybeUnitId)
                          $ progDesc "Lookup definition of value MODULE.NAME")
+  <> command "name-calls" (info (NameCalls <$> strArgument (metavar "NAME")
+                                           <*> optional moduleNameParser
+                                           <*> maybeUnitId)
+                         $ progDesc "Recursively find all callsites of MODULE.NAME")
   <> command "type-def" (info (TypeDef <$> strArgument (metavar "NAME")
                                        <*> optional moduleNameParser
                                        <*> maybeUnitId)
@@ -309,6 +314,11 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
       (row:.inf) <- reportAmbiguousErr opts =<< findOneDef conn occ mn muid
       let mdl = mkModule (modInfoUnit inf) (modInfoName inf)
       reportRefSpans opts [(mdl, (defSLine row, defSCol row), (defELine row, defECol row),Just $ Left (defSrc row))]
+    NameCalls nm mn muid -> do
+      let ns = if isCons nm then dataName else varName
+      let occ = mkOccName ns nm
+      refs <- findRecursiveCalls conn occ mn muid
+      mapM_ (putStrLn . showSDoc dynFlags . ppr) refs
     TypeDef nm mn muid -> do
       let occ = mkOccName tcClsName nm
       (row:.inf) <- reportAmbiguousErr opts =<< findOneDef conn occ mn muid
