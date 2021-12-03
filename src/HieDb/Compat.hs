@@ -66,6 +66,7 @@ module HieDb.Compat (
     , srcSpanStartCol
     , srcSpanEndLine
     , srcSpanEndCol
+    , srcSpanFile
     , mkSplitUniqSupply
     -- * Systools
     , initSysTools
@@ -82,6 +83,7 @@ module HieDb.Compat (
     , FastString
     -- * IFace
     , IfaceType
+    , fsLit
     , IfaceTyCon(..)
     , field_label
     , dfs

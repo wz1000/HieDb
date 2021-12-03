@@ -32,6 +32,7 @@ import Data.Int
 import Data.Maybe
 import Data.Monoid
 import Data.IORef
+import qualified Data.Tree as Tree
 
 import HieDb.Types
 import HieDb.Compat
@@ -42,6 +43,7 @@ import qualified Data.IntMap.Strict as IMap
 import Data.IntMap.Strict (IntMap)
 import Data.IntSet (IntSet)
 import Control.Monad (guard, unless)
+import GHC.Data.FastString (LexicalFastString(..))
 
 #if __GLASGOW_HASKELL__ >= 903
 import Control.Concurrent.MVar (readMVar)
@@ -179,25 +181,32 @@ instance Semigroup AstInfo where
 instance Monoid AstInfo where
   mempty = AstInfo [] [] []
 
-genAstInfo :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> AstInfo
-genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
+genAstInfo :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> HieASTs a -> AstInfo
+genAstInfo path smdl refmap asts = genRows $ flat $ M.toList refmap
   where
     flat = concatMap (\(a,xs) -> map (a,) xs)
     genRows = foldMap go
     go = mkAstInfo
 
-    mkAstInfo x = AstInfo (maybeToList $ goRef x) (maybeToList $ goDec x) (maybeToList $ goImport x)
+    mkAstInfo x = AstInfo (goRef x) (maybeToList $ goDec x) (maybeToList $ goImport x)
 
-    goRef (Right name, (sp,_))
-      | Just mod <- nameModule_maybe name = Just $
-          RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec
-          where
-            occ = nameOccName name
-            sl = srcSpanStartLine sp
-            sc = srcSpanStartCol sp
-            el = srcSpanEndLine sp
-            ec = srcSpanEndCol sp
-    goRef _ = Nothing
+    goRef (Right name, (sp,dets))
+      | Just mod <- nameModule_maybe name = [ RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec ]
+      | any isEvidenceUse (identInfo dets)
+      , Just ev_tree <- getEvidenceTree refmap name
+      = Tree.foldTree goLeaves ev_tree
+      where
+        occ = nameOccName name
+        sl = srcSpanStartLine sp
+        sc = srcSpanStartCol sp
+        el = srcSpanEndLine sp
+        ec = srcSpanEndCol sp
+        goLeaves (evidenceVar -> name) []
+          | Just mod <- nameModule_maybe name
+          , occ <- nameOccName name
+          = [ RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec ]
+        goLeaves _    children = concat children
+    goRef _ = []
 
     goImport (Left modName, (sp, IdentifierDetails _ contextInfos)) = do
           _ <- guard $ not $ S.disjoint contextInfos $ S.fromList [IEThing Import, IEThing ImportAs, IEThing ImportHiding]
@@ -209,12 +218,12 @@ genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
           Just $ ImportRow path modName sl sc el ec
     goImport _ = Nothing
 
-    goDec (Right name,(_,dets))
+    goDec (Right name,(sp,dets))
       | Just mod <- nameModule_maybe name
       , mod == smdl
       , occ  <- nameOccName name
       , info <- identInfo dets
-      , Just sp <- getBindSpan info
+      , Just sp <- getBindSpan sp info
       , is_root <- isRoot info
       , sl   <- srcSpanStartLine sp
       , sc   <- srcSpanStartCol sp
@@ -228,12 +237,19 @@ genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
       Decl _ _ -> True
       _ -> False)
 
-    getBindSpan = getFirst . foldMap (First . goDecl)
-    goDecl (ValBind _ _ sp) = sp
-    goDecl (PatternBind _ _ sp) = sp
-    goDecl (Decl _ sp) = sp
-    goDecl (RecField _ sp) = sp
-    goDecl _ = Nothing
+    getBindSpan sp = getFirst . foldMap (First . goDecl sp)
+    goDecl _ (ValBind RegularBind _ sp) = sp
+    goDecl _ (PatternBind _ _ sp) = sp
+    -- goDecl _ (Decl _ sp) = sp
+    goDecl _ (RecField _ sp) = sp
+    goDecl sp (EvidenceVarBind EvInstBind{} _ _)
+      | Just rsp <- nodeSpan <$> (smallestContainingSatisfying sp isClsInst =<< ast)
+      = Just rsp
+      where
+        isClsInst node = (NodeAnnotation (fsLit "ClsInstD") (fsLit "InstDecl")) `S.member`
+                            S.unions (M.map nodeAnnotations $ getSourcedNodeInfo $ sourcedNodeInfo node)
+        ast = M.lookup (LexicalFastString $ srcSpanFile sp) (getAsts asts)
+    goDecl _ _ = Nothing
 
 genDefRow :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> [DefRow]
 genDefRow path smod refmap = genRows $ M.toList refmap

@@ -339,7 +339,7 @@ addRefsFromLoaded_unsafe
 
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
-  let AstInfo rows decls imports = genAstInfo path smod refmap
+  let AstInfo rows decls imports = genAstInfo path smod refmap (hie_asts hf)
 
   unless (skipRefs skipOptions) $
     executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
