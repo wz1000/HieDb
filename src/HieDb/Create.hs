@@ -214,7 +214,7 @@ addRefsFrom c@(getConn -> conn) path = do
   case mods of
     (HieModuleRow{}:_) -> pure False
     [] -> do
-      withHieFile path $ addRefsFromLoaded c path (FakeFile Nothing) hash
+      withHieFile path $ \hieFile -> addRefsFromLoaded c path (RealFile $ hie_hs_file hieFile) hash hieFile
       pure True
 
 addRefsFromLoaded
