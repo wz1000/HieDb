@@ -38,6 +38,7 @@ import Data.IORef
 import HieDb.Types
 import HieDb.Compat
 import Database.SQLite.Simple
+import Control.Concurrent
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
@@ -75,8 +76,12 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 
 makeNc :: IO NameCache
 makeNc = do
+#if __GLASGOW_HASKELL__ >= 903
+  initNameCache 'z' []
+#else
   uniq_supply <- mkSplitUniqSupply 'z'
   return $ initNameCache uniq_supply []
+#endif
 
 -- | Recursively search for @.hie@ and @.hie-boot@  files in given directory
 getHieFilesIn :: FilePath -> IO [FilePath]
@@ -109,7 +114,12 @@ findDefInFile occ mdl file = do
   ncr <- newIORef =<< makeNc
   _ <- runDbM ncr $ withHieFile file (const $ return ())
   nc <- readIORef ncr
-  return $ case lookupOrigNameCache (nsNames nc) mdl occ of
+#if __GLASGOW_HASKELL__ >= 903
+  nsns <- readMVar (nsNames nc)
+#else
+  let nsns = nsNames nc
+#endif
+  return $ case lookupOrigNameCache nsns mdl occ of
     Just name -> case nameSrcSpan name of
 #if __GLASGOW_HASKELL__ >= 900
       RealSrcSpan sp _ -> Right (sp, mdl)

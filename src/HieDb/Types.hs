@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module HieDb.Types where
 
@@ -244,7 +245,11 @@ runDbM :: IORef NameCache -> DbMonad a -> IO a
 runDbM nc x = flip runReaderT nc $ runDbMonad x
 
 instance MonadIO m => NameCacheMonad (DbMonadT m) where
+#if __GLASGOW_HASKELL__ >= 903
+  getNcUpdater = DbMonadT $ ReaderT $ \ref -> liftIO $ readIORef ref
+#else
   getNcUpdater = DbMonadT $ ReaderT $ \ref -> pure (NCU $ atomicModifyIORef' ref)
+#endif
 
 
 data HieDbErr

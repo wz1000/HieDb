@@ -112,7 +112,9 @@ import Module
 import Name
 import NameCache
 import Outputable (showSDoc, ppr, (<+>), hang, text)
+#if __GLASGOW_HASKELL__ < 903
 import IfaceEnv (NameCacheUpdater(..))
+#endif
 import IfaceType
 import UniqSupply
 import SrcLoc
@@ -194,4 +196,8 @@ pattern AvailFL fl <- Avail.Avail (Avail.FieldGreName fl)
 #else
 -- pattern synonym that is never populated
 pattern AvailFL x <- Avail.Avail ((\_ -> (True, undefined)) -> (False, x))
+#endif
+
+#if __GLASGOW_HASKELL__ >= 903
+type NameCacheUpdater = NameCache
 #endif
