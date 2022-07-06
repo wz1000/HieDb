@@ -65,12 +65,12 @@ library
                      , hie-compat
                      , text
                      , bytestring
-                     , algebraic-graphs
+                     , algebraic-graphs >= 0.3
                      , lucid
                      , optparse-applicative
                      , extra
-                     , ansi-terminal
-                     , terminal-size
+                     , ansi-terminal >= 0.9
+                     , terminal-size >= 0.2
 
 test-suite hiedb-tests
   import:             common-options
