@@ -65,7 +65,7 @@ library
                      , hie-compat
                      , text
                      , bytestring
-                     , algebraic-graphs >= 0.3
+                     , algebraic-graphs >= 0.3 && < 0.7
                      , lucid
                      , optparse-applicative
                      , extra
