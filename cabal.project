@@ -1,11 +1,1 @@
 packages: .
--- package hiedb
---   ghc-options: -fwrite-ide-info -hiedir /home/zubin/hiedb/.hie/
-
-
-source-repository-package
-  type: git
-  location: https://github.com/jwaldmann/blaze-textual.git
-  tag: d8ee6cf80e27f9619d621c936bb4bda4b99a183f
-  -- https://github.com/jwaldmann/blaze-textual/commit/d8ee6cf80e27f9619d621c936bb4bda4b99a183f
-  -- https://github.com/bos/blaze-textual/issues/13
