@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                hiedb
-version:             0.4.1.0
+version:             0.4.2.0
 synopsis:            Generates a references DB from .hie files
 description:         Tool and library to index and query a collection of `.hie` files
 bug-reports:         https://github.com/wz1000/HieDb/issues
@@ -62,7 +62,7 @@ library
                      , directory
                      , mtl
                      , sqlite-simple
-                     , hie-compat
+                     , hie-compat ^>= 0.3
                      , text
                      , bytestring
                      , algebraic-graphs >= 0.3 && < 0.7
