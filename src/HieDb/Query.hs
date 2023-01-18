@@ -41,7 +41,7 @@ getAllIndexedMods :: HieDb -> IO [HieModuleRow]
 getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
 {-| List all module exports -}
-getAllIndexedExports :: HieDb -> IO [(ExportRow)]
+getAllIndexedExports :: HieDb -> IO [ExportRow]
 getAllIndexedExports (getConn -> conn) = query_ conn "SELECT * FROM exports"
 
 {-| List all exports of the given module -}
@@ -267,4 +267,4 @@ getReachableUnreachable db symbols = do
   return (Set.toList xs, Set.toList ys)
 
 splitByReachability :: Ord a => AdjacencyMap a -> [a] -> (Set a, Set a)
-splitByReachability m vs = let s = Set.fromList (dfs vs m) in (s, vertexSet m Set.\\ s)
+splitByReachability m vs = let s = Set.fromList  (dfs m vs) in (s, vertexSet m Set.\\ s)

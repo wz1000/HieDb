@@ -17,7 +17,7 @@ extra-source-files:
   test/data/Sub/*.hs
 tested-with:         GHC ==8.8.1 || ==8.8.2  || ==8.8.3  || ==8.8.4
                      || ==8.10.1 || ==8.10.2 || ==8.10.3 || ==8.10.4
-                     || ==9.0.1
+                     || ==9.0.1
 
 
 source-repository head
@@ -26,8 +26,10 @@ source-repository head
 
 common common-options
   default-language:    Haskell2010
-  build-depends:       base >= 4.12 && < 4.18
-  ghc-options:         -Wall
+  build-depends:       base >= 4.17 && < 4.18
+  ghc-options:         -fwrite-ide-info
+                       -hiedir .hie
+                       -Wall
                        -Wincomplete-uni-patterns
                        -Wincomplete-record-updates
                        -Wcompat
@@ -39,7 +41,7 @@ executable hiedb
   import:              common-options
   hs-source-dirs:      exe
   main-is:             Main.hs
-  build-depends:       base
+  build-depends:       base >= 4.17 && < 4.18
                      , hiedb
                      , ghc-paths
 
@@ -55,22 +57,22 @@ library
                        HieDb.Dump,
                        HieDb.Html,
                        HieDb.Run
-  build-depends:       ghc >= 8.6
+  build-depends:       ghc >= 9.4
                      , array
                      , containers
                      , filepath
                      , directory
                      , mtl
                      , sqlite-simple
-                     , hie-compat ^>= 0.3
+                     , hie-compat ^>= 0.3.1
                      , text
                      , bytestring
-                     , algebraic-graphs >= 0.3 && < 0.7
+                     , algebraic-graphs >= 0.7
                      , lucid
                      , optparse-applicative
                      , extra
-                     , ansi-terminal >= 0.9
-                     , terminal-size >= 0.2
+                     , ansi-terminal >= 0.11
+                     , terminal-size >= 0.3
 
 test-suite hiedb-tests
   import:             common-options
@@ -81,7 +83,7 @@ test-suite hiedb-tests
   build-tool-depends: hiedb:hiedb
   build-depends:      directory
                     , filepath
-                    , ghc >= 8.6
+                    , ghc >= 9.4
                     , ghc-paths
                     , hiedb
                     , hspec
