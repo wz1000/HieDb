@@ -214,21 +214,33 @@ cliSpec =
         runHieDbCli ["point-info", "Module1", "10", "10"]
           `succeedsWithStdin` unlines
             [ "Span: test/data/Module1.hs:10:8-11"
-#if __GLASGOW_HASKELL__ >= 902
+#if __GLASGOW_HASKELL__ >= 904
+            , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
+#elif __GLASGOW_HASKELL__ >= 902
             , "Constructors: {(XExpr, HsExpr), (HsVar, HsExpr)}"
 #elif __GLASGOW_HASKELL__ >= 900
             , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
 #else
             , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
 #endif
+#if __GLASGOW_HASKELL__ >= 904
+            , "Identifiers:"
+            , "$dIntegral defined at <no location info>"
+            , "    Details:  Just Integral Int {usage of evidence variable}"
+            , "Symbol:v:even:GHC.Real:base"
+            , "even defined at <no location info>"
+            , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
+#elif __GLASGOW_HASKELL__ >= 900
             , "Identifiers:"
             , "Symbol:v:even:GHC.Real:base"
             , "even defined at <no location info>"
-#if __GLASGOW_HASKELL__ >= 900
             , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
             , "$dIntegral defined at <no location info>"
             , "    Details:  Just Integral Int {usage of evidence variable}"
 #else
+            , "Identifiers:"
+            , "Symbol:v:even:GHC.Real:base"
+            , "even defined at <no location info>"
             , "    IdentifierDetails Just forall a. Integral a => a -> Bool {Use}"
 #endif
             , "Types:"
