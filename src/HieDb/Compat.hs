@@ -79,6 +79,7 @@ module HieDb.Compat (
     -- * IFace
     , IfaceType
     , IfaceTyCon(..)
+    , field_label
 ) where
 
 import Compat.HieTypes
@@ -95,7 +96,13 @@ import GHC.Types.Name
 import GHC.Types.Name.Cache
 import GHC.Types.Unique.Supply
 import GHC.Unit.Types
+#if __GLASGOW_HASKELL__ >= 905
+import Language.Haskell.Syntax.Module.Name
+import GHC.CmmToLlvm.Config
+import Language.Haskell.Syntax.Basic
+#else
 import GHC.Unit.Module.Name
+#endif
 import GHC.Utils.Fingerprint
 #if __GLASGOW_HASKELL__ >= 902
 import GHC.Driver.Ppr (showSDoc)
@@ -201,3 +208,10 @@ pattern AvailFL x <- Avail.Avail ((\_ -> (True, undefined)) -> (False, x))
 #if __GLASGOW_HASKELL__ >= 903
 type NameCacheUpdater = NameCache
 #endif
+
+#if __GLASGOW_HASKELL__ < 905
+field_label :: a -> a
+field_label = id
+#endif
+
+

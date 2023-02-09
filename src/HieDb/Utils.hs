@@ -148,7 +148,9 @@ dynFlagsForPrinting (LibDir libdir) = do
 #else
                     (Just libdir)
 #endif
-#if __GLASGOW_HASKELL__ >= 810
+#if __GLASGOW_HASKELL__ >= 905
+  return $ defaultDynFlags systemSettings
+#elif __GLASGOW_HASKELL__ >= 810
   return $ defaultDynFlags systemSettings $ LlvmConfig [] []
 #else
   return $ defaultDynFlags systemSettings ([], [])
@@ -268,7 +270,7 @@ generateExports fp = concatMap generateExport where
         , exportIsDatacon = False
         }]
       where
-        (n, m, u) = (mkVarOccFS $ flLabel fl
+        (n, m, u) = (mkVarOccFS $ field_label $ flLabel fl
                     -- For fields, the module details come from the parent
                     ,moduleName $ nameModule $ flSelector fl
                     ,moduleUnit $ nameModule $ flSelector fl
@@ -299,7 +301,7 @@ generateExports fp = concatMap generateExport where
                         ))
                       (drop 1 pieces)
                <> map (\s ->
-                        (mkVarOccFS $ flLabel s
+                        (mkVarOccFS $ field_label $ flLabel s
                         -- For fields, the module details come from the parent
                         ,moduleName $ nameModule name
                         ,moduleUnit $ nameModule name
