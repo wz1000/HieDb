@@ -45,6 +45,7 @@ Otherwise it throws 'IncompatibleSchemaVersion' exception.
 -}
 checkVersion :: (HieDb -> IO a) -> HieDb -> IO a
 checkVersion k db@(getConn -> conn) = do
+  execute_ conn "PRAGMA busy_timeout = 500;"
   execute_ conn "PRAGMA journal_mode = WAL;"
   [Only ver] <- query_ conn "PRAGMA user_version"
   if ver == 0 then do
@@ -72,6 +73,7 @@ withHieDbAndFlags libdir fp f = do
 -}
 initConn :: HieDb -> IO ()
 initConn (getConn -> conn) = do
+  execute_ conn "PRAGMA busy_timeout = 500;"
   execute_ conn "PRAGMA journal_mode = WAL;"
   execute_ conn "PRAGMA foreign_keys = ON;"
   execute_ conn "PRAGMA defer_foreign_keys = ON;"
