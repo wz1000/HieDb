@@ -45,6 +45,7 @@ Otherwise it throws 'IncompatibleSchemaVersion' exception.
 -}
 checkVersion :: (HieDb -> IO a) -> HieDb -> IO a
 checkVersion k db@(getConn -> conn) = do
+  execute_ conn "PRAGMA journal_mode = WAL;"
   [Only ver] <- query_ conn "PRAGMA user_version"
   if ver == 0 then do
     execute_ conn $ fromString $ "PRAGMA user_version = " ++ show dB_VERSION
