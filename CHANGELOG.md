@@ -1,5 +1,15 @@
 # Revision history for hiedb
 
+## 0.4.3.0 -- 2023-03-13
+
+* Support GHC 9.6
+* Set sqlite pragma busy_timeout to 500ms to mitigate frequent failures on concurrent access
+
+## 0.4.2.0 -- 2022-09-12
+
+* Support GHC 9.4
+* Add upper bounds for base and algebraic graphs
+
 ## 0.4.1.0 -- 2021-06-29
 
 * Support GHC 9.2 (@fendor)
