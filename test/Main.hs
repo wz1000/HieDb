@@ -370,4 +370,5 @@ testOpts = Options
   , context = Nothing
   , reindex = False
   , keepMissing = False
+  , srcBaseDir = Nothing
   }

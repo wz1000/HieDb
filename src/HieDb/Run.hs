@@ -79,6 +79,7 @@ data Options
   , context :: Maybe Natural
   , reindex :: Bool
   , keepMissing :: Bool
+  , srcBaseDir :: Maybe FilePath
   }
 
 data Command
@@ -125,6 +126,7 @@ optParser defdb colr
   <*> optional (option auto (long "context" <> short 'C' <> help "Number of lines of context for source spans - show no context by default"))
   <*> switch (long "reindex" <> short 'r' <> help "Re-index all files in database before running command, deleting those with missing '.hie' files")
   <*> switch (long "keep-missing" <> help "Keep missing files when re-indexing")
+  <*> optional (strOption (long "src-base-dir" <> help "Provide a base directory to index src files as real files"))
   where
     colourFlag = flag' True (long "colour" <> long "color" <> help "Force coloured output")
             <|> flag' False (long "no-colour" <> long "no-color" <> help "Force uncoloured ouput")
@@ -236,7 +238,7 @@ doIndex conn opts h files = do
 
   istart <- offsetTime
   (length -> done, length -> skipped)<- runDbM nc $ partition id <$>
-    zipWithM (\f n -> progress' h (length files) n (addRefsFrom conn) f) files [0..]
+    zipWithM (\f n -> progress' h (length files) n (addRefsFrom conn (srcBaseDir opts)) f) files [0..]
   indexTime <- istart
 
   start <- offsetTime

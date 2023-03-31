@@ -26,6 +26,7 @@ import Data.Maybe
 import Data.String
 
 import System.Directory
+import System.FilePath
 
 import Database.SQLite.Simple
 
@@ -210,15 +211,28 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
 The indexing is skipped if the file was not modified since the last time it was indexed.
 The boolean returned is true if the file was actually indexed
 -}
-addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> FilePath -> m Bool
-addRefsFrom c@(getConn -> conn) path = do
+addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> Maybe FilePath -> FilePath -> m Bool
+addRefsFrom c@(getConn -> conn) mSrcBaseDir path = do
   hash <- liftIO $ getFileHash path
   mods <- liftIO $ query conn "SELECT * FROM mods WHERE hieFile = ? AND hash = ?" (path, hash)
   case mods of
     (HieModuleRow{}:_) -> pure False
     [] -> do
-      withHieFile path $ addRefsFromLoaded c path (FakeFile Nothing) hash
+      withHieFile path $ addRefsWithFile  hash
       pure True
+  where
+      addRefsWithFile :: MonadIO m => Fingerprint -> HieFile -> m ()
+      addRefsWithFile hash hieFile = do
+        srcfile <- liftIO $
+              maybe
+                (pure . FakeFile $ Nothing)
+                (\srcBaseDir ->  do
+                    srcFullPath <- makeAbsolute (srcBaseDir </> hie_hs_file hieFile)
+                    fileExists <- doesFileExist srcFullPath
+                    pure $ if fileExists then RealFile srcFullPath else (FakeFile Nothing)
+                )
+                mSrcBaseDir
+        addRefsFromLoaded c path srcfile hash hieFile
 
 addRefsFromLoaded
   :: MonadIO m
