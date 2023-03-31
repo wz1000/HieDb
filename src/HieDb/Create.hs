@@ -217,14 +217,24 @@ addRefsFrom c@(getConn -> conn) path = do
   case mods of
     (HieModuleRow{}:_) -> pure False
     [] -> do
-      withHieFile path $ addRefsFromLoaded c path (FakeFile Nothing) hash
+      withHieFile path $ addRefsWithFile hash
       pure True
+    where
+      addRefsWithFile :: MonadIO m => Fingerprint -> HieFile -> m ()
+      addRefsWithFile hash hieFile = do
+        file <- liftIO . makeAbsolute $ hie_hs_file hieFile
+        fileExists <- liftIO $ doesFileExist file
+        let srcfile = if fileExists then (RealFile file) else (FakeFile Nothing)
+        addRefsFromLoaded c path srcfile hash hieFile
 
 addRefsFromLoaded
   :: MonadIO m
   => HieDb -- ^ HieDb into which we're adding the file
   -> FilePath -- ^ Path to @.hie@ file
-  -> SourceFile -- ^ Ignored but maintained for backward compatibility - pass in a (FakeFile Nothing)
+  -> SourceFile -- ^ Path to .hs file from which @.hie@ file was created
+                -- Also tells us if this is a real source file?
+                -- i.e. does it come from user's project (as opposed to from project's dependency)?
+                -- src File information will be retrieved from HieFile
                 -- src File information will be retrieved from HieFile
   -> Fingerprint -- ^ The hash of the @.hie@ file
   -> HieFile -- ^ Data loaded from the @.hie@ file
@@ -244,24 +254,25 @@ addRefsFromLoaded_unsafe
   :: MonadIO m
   => HieDb -- ^ HieDb into which we're adding the file
   -> FilePath -- ^ Path to @.hie@ file
-  -> SourceFile -- ^ Ignored but maintained for backward compatibility - pass in a (FakeFile Nothing)
+  -> SourceFile -- ^ Path to .hs file from which @.hie@ file was created
+                -- Also tells us if this is a real source file?
+                -- i.e. does it come from user's project (as opposed to from project's dependency)?
                 -- src File information will be retrieved from HieFile
   -> Fingerprint -- ^ The hash of the @.hie@ file
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> m ()
 addRefsFromLoaded_unsafe
- db@(getConn -> conn) path _ hash hf = liftIO $ do
+ db@(getConn -> conn) path sourceFile hash hf = liftIO $ do
 
   let isBoot = "boot" `isSuffixOf` path
       mod    = moduleName smod
       uid    = moduleUnit smod
       smod   = hie_module hf
       refmap = generateReferencesMap $ getAsts $ hie_asts hf
-      isReal = True
-      
-  srcFile <- Just <$> (makeAbsolute $ hie_hs_file hf)
-      
-  let modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile isReal hash)
+      (srcFile, isReal) = case sourceFile of
+        RealFile f -> (Just f, True)
+        FakeFile mf -> (mf, False)
+      modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile isReal hash)
 
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
