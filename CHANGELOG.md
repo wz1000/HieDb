@@ -1,6 +1,6 @@
 # Revision history for hiedb
 
-## 0.4.4.0 -- 2023-03-31
+## 0.4.4.0 -- TODO
 * Add `--src-base-dir` option allowing for src file indexing in `mods`
 
 ## 0.4.3.0 -- 2023-03-13
