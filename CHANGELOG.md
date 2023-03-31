@@ -1,5 +1,8 @@
 # Revision history for hiedb
 
+## 0.4.4.0 -- 2023-03-30
+* Add indexing src files in `mods`
+
 ## 0.4.3.0 -- 2023-03-13
 
 * Support GHC 9.6

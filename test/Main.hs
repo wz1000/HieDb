@@ -71,7 +71,7 @@ apiSpec = describe "api" $
               Just modRow -> do
                 hieModuleHieFile modRow `shouldEndWith` "Module1.hie"
                 let modInfo = hieModInfo modRow
-                modInfoIsReal modInfo `shouldBe` False
+                modInfoIsReal modInfo `shouldBe` True
                 modInfoName modInfo `shouldBe` modName
               Nothing -> fail "Should have looked up indexed file"
           it "Should return Nothing for not indexed Module" $ \conn -> do
