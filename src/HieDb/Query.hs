@@ -6,7 +6,6 @@
 module HieDb.Query where
 
 import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, vertexSet, vertices, overlay)
-import           Algebra.Graph.AdjacencyMap.Algorithm (dfs)
 import           Algebra.Graph.Export.Dot hiding ((:=))
 import qualified Algebra.Graph.Export.Dot as G
 
@@ -267,4 +266,4 @@ getReachableUnreachable db symbols = do
   return (Set.toList xs, Set.toList ys)
 
 splitByReachability :: Ord a => AdjacencyMap a -> [a] -> (Set a, Set a)
-splitByReachability m vs = let s = Set.fromList (dfs vs m) in (s, vertexSet m Set.\\ s)
+splitByReachability m vs = let s = Set.fromList (dfs m vs) in (s, vertexSet m Set.\\ s)

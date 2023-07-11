@@ -80,6 +80,7 @@ module HieDb.Compat (
     , IfaceType
     , IfaceTyCon(..)
     , field_label
+    , dfs
 ) where
 
 import Compat.HieTypes
@@ -135,6 +136,8 @@ import Compat.HieUtils
 
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Algebra.Graph.AdjacencyMap           as Graph
+import qualified Algebra.Graph.AdjacencyMap.Algorithm as Graph
 
 
 -- nodeInfo' :: Ord a => HieAST a -> NodeInfo a
@@ -214,4 +217,9 @@ field_label :: a -> a
 field_label = id
 #endif
 
-
+dfs :: Ord a => Graph.AdjacencyMap a -> [a] -> [a]
+#if MIN_VERSION_algebraic_graphs(0,7,0)
+dfs = Graph.dfs
+#else
+dfs = flip Graph.dfs
+#endif

@@ -26,7 +26,7 @@ source-repository head
 
 common common-options
   default-language:    Haskell2010
-  build-depends:       base >= 4.12 && < 4.18
+  build-depends:       base >= 4.12 && < 4.19
   ghc-options:         -Wall
                        -Wincomplete-uni-patterns
                        -Wincomplete-record-updates
@@ -65,7 +65,7 @@ library
                      , hie-compat ^>= 0.3
                      , text
                      , bytestring
-                     , algebraic-graphs >= 0.3 && < 0.7
+                     , algebraic-graphs >= 0.3
                      , lucid
                      , optparse-applicative
                      , extra
