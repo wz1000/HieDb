@@ -101,6 +101,18 @@ lookupHieFileFromSource (getConn -> conn) fp = do
             ++ show fp ++ ". Entries: "
             ++ intercalate ", " (map (show . toRow) xs)
 
+{-| Lookup 'HieModule' row from 'HieDb' given the hash of the HIE file -}
+lookupHieFileFromHash :: HieDb -> Fingerprint -> IO (Maybe HieModuleRow)
+lookupHieFileFromHash (getConn -> conn) hash = do
+  files <- query conn "SELECT * FROM mods WHERE hash = ?" (Only hash)
+  case files of
+    [] -> return Nothing
+    [x] -> return $ Just x
+    xs ->
+      error $ "DB invariant violated, hash in mods not unique: "
+            ++ show hash ++ ". Entries: "
+            ++ intercalate ", " (map (show . toRow) xs)
+
 findTypeRefs :: HieDb -> Bool -> OccName -> Maybe ModuleName -> Maybe Unit -> [FilePath] -> IO [Res TypeRef]
 findTypeRefs (getConn -> conn) isReal occ mn uid exclude
   = queryNamed conn thisQuery ([":occ" := occ, ":mod" := mn, ":unit" := uid, ":real" := isReal] ++ excludedFields)
