@@ -305,6 +305,15 @@ addSrcFile
 addSrcFile (getConn -> conn) hie srcFile isReal =
   execute conn "UPDATE mods SET hs_src = ? , is_real = ? WHERE hieFile = ?" (srcFile, isReal, hie)
 
+{-| Remove the path to .hs source for all dependency @.hie@ files. Useful for resetting
+the indexed dependencies if the sources have been deleted for some reason.
+-}
+removeDependencySrcFiles
+  :: HieDb
+  -> IO ()
+removeDependencySrcFiles (getConn -> conn) =
+  execute conn "UPDATE mods SET hs_src = NULL WHERE NOT is_real" ()
+
 {-| Delete all occurrences of given @.hie@ file from the database -}
 deleteFileFromIndex :: HieDb -> FilePath -> IO ()
 deleteFileFromIndex (getConn -> conn) path = withTransaction conn $ do
