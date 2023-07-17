@@ -77,6 +77,11 @@ findReferences (getConn -> conn) isReal occ mn uid exclude =
             \((NOT :real) OR (mods.is_real AND mods.hs_src IS NOT NULL))"
       <> " AND mods.hs_src NOT IN (" <> Query (T.intercalate "," (map (\(l := _) -> l) excludedFields)) <> ")"
 
+{-| Lookup all 'HieModule' rows from 'HieDb' that are part of a given 'Unit' -}
+lookupPackage :: HieDb -> Unit -> IO [HieModuleRow]
+lookupPackage (getConn -> conn) uid =
+  query conn "SELECT * FROM mods WHERE unit = ?" (Only uid)
+
 {-| Lookup 'HieModule' row from 'HieDb' given its 'ModuleName' and 'Unit' -}
 lookupHieFile :: HieDb -> ModuleName -> Unit -> IO (Maybe HieModuleRow)
 lookupHieFile (getConn -> conn) mn uid = do
