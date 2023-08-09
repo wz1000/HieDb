@@ -157,6 +157,8 @@ combineNodeInfo' :: Ord a => NodeInfo a -> NodeInfo a -> NodeInfo a
     mergeSorted [] bs = bs
 #else
 import qualified FastString as FS
+import qualified Algebra.Graph.AdjacencyMap           as Graph
+import qualified Algebra.Graph.AdjacencyMap.Algorithm as Graph
 
 nodeInfo' :: HieAST TypeIndex -> NodeInfo TypeIndex
 nodeInfo' = nodeInfo
