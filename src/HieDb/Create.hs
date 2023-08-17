@@ -222,7 +222,7 @@ data SkipOptions =
     deriving Show
 
 defaultSkipOptions :: SkipOptions
-defaultSkipOptions = 
+defaultSkipOptions =
   SkipOptions
     {
     skipRefs = False
@@ -323,7 +323,7 @@ addRefsFromLoaded_unsafe
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
   let (rows,decls) = genRefsAndDecls path smod refmap
-  
+
   unless (skipRefs skipOptions) $
     executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
   unless (skipDecls skipOptions) $
@@ -331,7 +331,7 @@ addRefsFromLoaded_unsafe
 
   let defs = genDefRow path smod refmap
   unless (skipDefs skipOptions) $
-    void $ forM defs $ \def -> do
+    forM_ defs $ \def ->
       execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
 
   let exports = generateExports path $ hie_exports hf

@@ -143,7 +143,7 @@ cliSpec =
               ]
         (exitCode, actualStdin, _actualStdErr) <- runHieDbCli ["ls"]
         exitCode `shouldBe` ExitSuccess
-        (sort $ lines actualStdin) `shouldBe` (sort expectedOutput)
+        sort (lines actualStdin) `shouldBe` sort expectedOutput
 
     describe "name-refs" $
       it "lists all references of given function" $ do
@@ -167,8 +167,7 @@ cliSpec =
       it "Prints types of symbol under cursor" $
         runHieDbCli ["point-types", "Module1", "10", "10" ]
           `succeedsWithStdin` unlines
-            [ "Int -> Bool" {- types of `even` function under cursor -}
-            , "forall a. Integral a => a -> Bool"
+            [ "Bool -> Bool" {- type of `not` function under cursor -}
             ]
       it "Fails for symbols that don't have type associated" $ do
         (exitCode, actualStdout, actualStderr) <- runHieDbCli ["point-types", "Module1", "8", "21"]
@@ -213,44 +212,18 @@ cliSpec =
       it "correctly prints type signatures" $
         runHieDbCli ["point-info", "Module1", "10", "10"]
           `succeedsWithStdin` unlines
-#if __GLASGOW_HASKELL__ >= 904
-            [ "Span: test/data/Module1.hs:10:8-11"
-            , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
+            [ "Span: test/data/Module1.hs:10:8-10"
+            , "Constructors: {(HsVar, HsExpr)}"
             , "Identifiers:"
-            , "$dIntegral defined at <no location info>"
-            , "    Details:  Just Integral Int {usage of evidence variable}"
-            , "Symbol:v::even:GHC.Real:base"
-            , "even defined at <no location info>"
-            , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
-#elif __GLASGOW_HASKELL__ >= 902
-            [ "Span: test/data/Module1.hs:10:8-11"
-            , "Constructors: {(XExpr, HsExpr), (HsVar, HsExpr)}"
-            , "Identifiers:"
-            , "Symbol:v::even:GHC.Real:base"
-            , "even defined at <no location info>"
-            , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
-            , "$dIntegral defined at <no location info>"
-            , "    Details:  Just Integral Int {usage of evidence variable}"
-#elif __GLASGOW_HASKELL__ >= 900
-            [ "Span: test/data/Module1.hs:10:8-11"
-            , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
-            , "Identifiers:"
-            , "Symbol:v::even:GHC.Real:base"
-            , "even defined at <no location info>"
-            , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
-            , "$dIntegral defined at <no location info>"
-            , "    Details:  Just Integral Int {usage of evidence variable}"
+            , "Symbol:v::not:GHC.Classes:ghc-prim"
+            , "not defined at <no location info>"
+#if __GLASGOW_HASKELL__ >= 900
+            , "    Details:  Just Bool -> Bool {usage}"
 #else
-            [ "Span: test/data/Module1.hs:10:8-11"
-            , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
-            , "Identifiers:"
-            , "Symbol:v::even:GHC.Real:base"
-            , "even defined at <no location info>"
-            , "    IdentifierDetails Just forall a. Integral a => a -> Bool {Use}"
+            , "    IdentifierDetails Just Bool -> Bool {Use}"
 #endif
             , "Types:"
-            , "Int -> Bool"
-            , "forall a. Integral a => a -> Bool"
+            , "Bool -> Bool"
             , ""
             ]
 

@@ -133,14 +133,15 @@ import SysTools
 import qualified Avail
 #endif
 
+import qualified Algebra.Graph.AdjacencyMap           as Graph
+import qualified Algebra.Graph.AdjacencyMap.Algorithm as Graph
+
 #if __GLASGOW_HASKELL__ >= 900
 import GHC.Types.SrcLoc
 import Compat.HieUtils
 
 import qualified Data.Map as M
 import qualified Data.Set as S
-import qualified Algebra.Graph.AdjacencyMap           as Graph
-import qualified Algebra.Graph.AdjacencyMap.Algorithm as Graph
 
 
 -- nodeInfo' :: Ord a => HieAST a -> NodeInfo a
