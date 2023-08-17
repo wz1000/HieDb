@@ -91,6 +91,7 @@ initConn (getConn -> conn) = do
                 \, CONSTRAINT real_has_src CHECK ( (NOT is_real) OR (hs_src IS NOT NULL) ) \
                 \)"
   execute_ conn "CREATE INDEX IF NOT EXISTS mod_hash ON mods(hieFile,hash)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS mod_unit ON mods(unit)"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS exports \
                 \( hieFile TEXT NOT NULL \
