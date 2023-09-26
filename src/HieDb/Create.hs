@@ -207,12 +207,25 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
         $ nodeInfo' ast
       mapM_ addTypesFromAst $ nodeChildren ast
 
+-- | Options to skip indexing phases
+data SkipOptions =
+  SkipOptions
+    {
+    skipRefs :: Bool
+    , skipDecls :: Bool
+    , skipDefs :: Bool
+    , skipExports :: Bool
+    , skipTypes :: Bool
+    -- ^ Note skip types will also skip type refs since it is dependent
+    , skipTypeRefs :: Bool
+    }
+
 {-| Adds all references from given @.hie@ file to 'HieDb'.
 The indexing is skipped if the file was not modified since the last time it was indexed.
 The boolean returned is true if the file was actually indexed
 -}
-addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> Maybe FilePath -> FilePath -> m Bool
-addRefsFrom c@(getConn -> conn) mSrcBaseDir path = do
+addRefsFrom :: (MonadIO m, NameCacheMonad m) => HieDb -> Maybe FilePath -> SkipOptions -> FilePath ->  m Bool
+addRefsFrom c@(getConn -> conn) mSrcBaseDir skipOptions path = do
   hash <- liftIO $ getFileHash path
   mods <- liftIO $ query conn "SELECT * FROM mods WHERE hieFile = ? AND hash = ?" (path, hash)
   case mods of
@@ -232,7 +245,7 @@ addRefsFrom c@(getConn -> conn) mSrcBaseDir path = do
                     pure $ if fileExists then RealFile srcFullPath else (FakeFile Nothing)
                 )
                 mSrcBaseDir
-        addRefsFromLoaded c path srcfile hash hieFile
+        addRefsFromLoaded c path srcfile hash skipOptions hieFile
 
 addRefsFromLoaded
   :: MonadIO m
@@ -242,13 +255,14 @@ addRefsFromLoaded
                 -- Also tells us if this is a real source file?
                 -- i.e. does it come from user's project (as opposed to from project's dependency)?
   -> Fingerprint -- ^ The hash of the @.hie@ file
+  -> SkipOptions -- ^ Skip indexing certain tables
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> m ()
 addRefsFromLoaded
-  db@(getConn -> conn) path sourceFile hash hf =
+  db@(getConn -> conn) path sourceFile hash skipOptions hf =
     liftIO $ withTransaction conn $ do
       deleteInternalTables conn path
-      addRefsFromLoaded_unsafe db path sourceFile hash hf
+      addRefsFromLoaded_unsafe db path sourceFile hash skipOptions hf
 
 -- | Like 'addRefsFromLoaded' but without:
 --   1) using a transaction
@@ -263,10 +277,11 @@ addRefsFromLoaded_unsafe
                 -- Also tells us if this is a real source file?
                 -- i.e. does it come from user's project (as opposed to from project's dependency)?
   -> Fingerprint -- ^ The hash of the @.hie@ file
+  -> SkipOptions -- ^ Skip indexing certain tables
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> m ()
 addRefsFromLoaded_unsafe
- db@(getConn -> conn) path sourceFile hash hf = liftIO $ do
+ db@(getConn -> conn) path sourceFile hash skipOptions hf = liftIO $ do
 
   let isBoot = "boot" `isSuffixOf` path
       mod    = moduleName smod
@@ -281,18 +296,25 @@ addRefsFromLoaded_unsafe
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
   let (rows,decls) = genRefsAndDecls path smod refmap
-  executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
-  executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?)" decls
+  
+  unless (skipRefs skipOptions) $
+    executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
+  unless (skipDecls skipOptions) $
+    executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?)" decls
 
   let defs = genDefRow path smod refmap
-  forM defs $ \def -> do
-    execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
+  unless (skipDefs skipOptions) $
+    forM defs $ \def -> do
+      execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
 
   let exports = generateExports path $ hie_exports hf
-  executeMany conn "INSERT INTO exports VALUES (?,?,?,?,?,?,?,?)" exports
+  unless (skipExports skipOptions) $
+    executeMany conn "INSERT INTO exports VALUES (?,?,?,?,?,?,?,?)" exports
 
-  ixs <- addArr db (hie_types hf)
-  addTypeRefs db path hf ixs
+  unless (skipTypes skipOptions) $ do
+    ixs <- addArr db (hie_types hf)
+    unless (skipTypeRefs skipOptions) $ do
+      addTypeRefs db path hf ixs
 
 {-| Add path to .hs source given path to @.hie@ file which has already been indexed.
 No action is taken if the corresponding @.hie@ file has not been indexed yet.
