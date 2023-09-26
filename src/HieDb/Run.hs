@@ -5,6 +5,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ApplicativeDo #-}
 module HieDb.Run where
 
 import Prelude hiding (mod)
@@ -80,6 +81,7 @@ data Options
   , reindex :: Bool
   , keepMissing :: Bool
   , srcBaseDir :: Maybe FilePath
+  , skipIndexingOptions :: SkipOptions
   }
 
 data Command
@@ -127,10 +129,27 @@ optParser defdb colr
   <*> switch (long "reindex" <> short 'r' <> help "Re-index all files in database before running command, deleting those with missing '.hie' files")
   <*> switch (long "keep-missing" <> help "Keep missing files when re-indexing")
   <*> optional (strOption (long "src-base-dir" <> help "Provide a base directory to index src files as real files"))
+  <*> skipFlags
   where
     colourFlag = flag' True (long "colour" <> long "color" <> help "Force coloured output")
             <|> flag' False (long "no-colour" <> long "no-color" <> help "Force uncoloured ouput")
             <|> pure colr
+    skipFlags = do
+        refs <- switch (long "skip-refs" <> help "Skip refs table when indexing")
+        decls <- switch (long "skip-decls" <> help "Skip decls table when indexing")
+        defs <- switch (long "skip-defs" <> help "Skip defs table when indexing")
+        exports <- switch (long "skip-exports" <> help "Skip exports table when indexing")
+        types <- switch (long "skip-types" <> help "Skip types and typerefs table when indexing")
+        typeRefs <- switch (long "skip-typerefs" <> help "Skip typerefs table when indexing")
+        pure $ SkipOptions
+          {
+          skipRefs = refs
+          , skipDecls = decls
+          , skipDefs = defs
+          , skipExports = exports
+          , skipTypes = types
+          , skipTypeRefs = typeRefs
+          }
 
 cmdParser :: Parser Command
 cmdParser
@@ -238,7 +257,7 @@ doIndex conn opts h files = do
 
   istart <- offsetTime
   (length -> done, length -> skipped)<- runDbM nc $ partition id <$>
-    zipWithM (\f n -> progress' h (length files) n (addRefsFrom conn (srcBaseDir opts)) f) files [0..]
+    zipWithM (\f n -> progress' h (length files) n (addRefsFrom conn (srcBaseDir opts) (skipIndexingOptions opts)) f) files [0..]
   indexTime <- istart
 
   start <- offsetTime
