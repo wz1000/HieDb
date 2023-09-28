@@ -219,6 +219,7 @@ data SkipOptions =
     -- ^ Note skip types will also skip type refs since it is dependent
     , skipTypeRefs :: Bool
     }
+    deriving Show
 
 defaultSkipOptions :: SkipOptions
 defaultSkipOptions = 
@@ -258,9 +259,22 @@ addRefsFrom c@(getConn -> conn) mSrcBaseDir skipOptions path = do
                     pure $ if fileExists then RealFile srcFullPath else (FakeFile Nothing)
                 )
                 mSrcBaseDir
-        addRefsFromLoaded c path srcfile hash skipOptions hieFile
+        addRefsFromLoadedInternal c path srcfile hash skipOptions hieFile
 
 addRefsFromLoaded
+  :: MonadIO m
+  => HieDb -- ^ HieDb into which we're adding the file
+  -> FilePath -- ^ Path to @.hie@ file
+  -> SourceFile -- ^ Path to .hs file from which @.hie@ file was created
+                -- Also tells us if this is a real source file?
+                -- i.e. does it come from user's project (as opposed to from project's dependency)?
+  -> Fingerprint -- ^ The hash of the @.hie@ file
+  -> HieFile -- ^ Data loaded from the @.hie@ file
+  -> m ()
+addRefsFromLoaded db path sourceFile hash hf =
+    addRefsFromLoadedInternal db path sourceFile hash defaultSkipOptions hf
+
+addRefsFromLoadedInternal
   :: MonadIO m
   => HieDb -- ^ HieDb into which we're adding the file
   -> FilePath -- ^ Path to @.hie@ file
@@ -271,7 +285,7 @@ addRefsFromLoaded
   -> SkipOptions -- ^ Skip indexing certain tables
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> m ()
-addRefsFromLoaded
+addRefsFromLoadedInternal
   db@(getConn -> conn) path sourceFile hash skipOptions hf =
     liftIO $ withTransaction conn $ do
       deleteInternalTables conn path

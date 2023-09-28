@@ -103,7 +103,7 @@ apiSpec = describe "api" $
               hash <- getFileHash hie_f
               nc <- newIORef =<< makeNc
               runDbM nc $ withHieFile hie_f $
-                addRefsFromLoaded conn hie_f (RealFile fp) hash defaultSkipOptions 
+                addRefsFromLoaded conn hie_f (RealFile fp) hash
               pure fp
 
             -- Check that it was indexed
