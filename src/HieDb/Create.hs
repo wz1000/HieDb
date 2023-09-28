@@ -220,6 +220,19 @@ data SkipOptions =
     , skipTypeRefs :: Bool
     }
 
+defaultSkipOptions :: SkipOptions
+defaultSkipOptions = 
+  SkipOptions
+    {
+    skipRefs = False
+    , skipDecls = False
+    , skipDefs = False
+    , skipExports = False
+    , skipTypes = False
+    -- ^ Note skip types will also skip type refs since it is dependent
+    , skipTypeRefs = False
+    }
+
 {-| Adds all references from given @.hie@ file to 'HieDb'.
 The indexing is skipped if the file was not modified since the last time it was indexed.
 The boolean returned is true if the file was actually indexed
