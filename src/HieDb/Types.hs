@@ -178,6 +178,28 @@ instance FromRow DeclRow where
   fromRow = DeclRow <$> field <*> field <*> field <*> field
                     <*> field <*> field <*> field
 
+data ImportRow 
+  = ImportRow 
+    { importSrc :: FilePath
+    , importModuleName :: ModuleName
+    , importSLine :: Int 
+    , importSCol :: Int 
+    , importELine :: Int 
+    , importECol :: Int 
+    }
+
+instance Show ImportRow where 
+  show = show . toRow
+
+instance FromRow ImportRow where 
+  fromRow = 
+    ImportRow 
+      <$> field <*> field <*> field <*> field 
+      <*> field <*> field
+
+instance ToRow ImportRow where 
+  toRow (ImportRow a b c d e f) = toRow ((a,b,c,d):.(e,f))
+
 data TypeName = TypeName
   { typeName :: OccName
   , typeMod :: ModuleName

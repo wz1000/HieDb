@@ -139,6 +139,7 @@ optParser defdb colr
         decls <- switch (long "skip-decls" <> help "Skip decls table when indexing")
         defs <- switch (long "skip-defs" <> help "Skip defs table when indexing")
         exports <- switch (long "skip-exports" <> help "Skip exports table when indexing")
+        imports <- switch (long "skip-imports" <> help "Skip imports table when indexing")
         types <- switch (long "skip-types" <> help "Skip types and typerefs table when indexing")
         typeRefs <- switch (long "skip-typerefs" <> help "Skip typerefs table when indexing")
         pure $ SkipOptions
@@ -147,6 +148,7 @@ optParser defdb colr
           , skipDecls = decls
           , skipDefs = defs
           , skipExports = exports
+          , skipImports = imports
           , skipTypes = types
           , skipTypeRefs = typeRefs
           }

@@ -89,4 +89,6 @@ test-suite hiedb-tests
                     , hiedb
                     , hspec
                     , process
+                    , sqlite-simple
                     , temporary
+                    , text

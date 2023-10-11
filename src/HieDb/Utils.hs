@@ -17,14 +17,14 @@ import Compat.HieBin
 import Compat.HieTypes
 import qualified Compat.HieTypes as HieTypes
 import Compat.HieUtils
+import Control.Monad (guard)
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 
 import System.Directory
 import System.FilePath
 
-import Control.Arrow ( (&&&) )
-import Data.Bifunctor ( bimap )
 import Data.List (find)
 import Control.Monad.IO.Class
 import qualified Data.Array as A
@@ -164,12 +164,27 @@ isCons (':':_) = True
 isCons (x:_) | isUpper x = True
 isCons _ = False
 
-genRefsAndDecls :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> ([RefRow],[DeclRow])
-genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
+data AstInfo =
+  AstInfo
+    { astInfoRefs :: [RefRow]
+    , astInfoDecls :: [DeclRow]
+    , astInfoImports :: [ImportRow]
+    }
+
+instance Semigroup AstInfo where 
+  AstInfo r1 d1 i1 <> AstInfo r2 d2 i2 = AstInfo (r1 <> r2) (d1 <> d2) (i1 <> i2)
+
+instance Monoid AstInfo where 
+  mempty = AstInfo [] [] []
+
+genAstInfo :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> AstInfo
+genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
   where
     flat = concatMap (\(a,xs) -> map (a,) xs)
     genRows = foldMap go
-    go = bimap maybeToList maybeToList . (goRef &&& goDec)
+    go = mkAstInfo
+
+    mkAstInfo x = AstInfo (maybeToList $ goRef x) (maybeToList $ goDec x) (maybeToList $ goImport x)
 
     goRef (Right name, (sp,_))
       | Just mod <- nameModule_maybe name = Just $
@@ -181,6 +196,16 @@ genRefsAndDecls path smdl refmap = genRows $ flat $ M.toList refmap
             el = srcSpanEndLine sp
             ec = srcSpanEndCol sp
     goRef _ = Nothing
+
+    goImport (Left modName, (sp, IdentifierDetails _ contextInfos)) = do
+          _ <- guard $ not $ S.disjoint contextInfos $ S.fromList [IEThing Import, IEThing ImportAs, IEThing ImportHiding]
+          let
+            sl = srcSpanStartLine sp
+            sc = srcSpanStartCol sp
+            el = srcSpanEndLine sp
+            ec = srcSpanEndCol sp
+          Just $ ImportRow path modName sl sc el ec
+    goImport _ = Nothing
 
     goDec (Right name,(_,dets))
       | Just mod <- nameModule_maybe name

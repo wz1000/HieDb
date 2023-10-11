@@ -131,6 +131,19 @@ initConn (getConn -> conn) = do
                 \)"
   execute_ conn "CREATE INDEX IF NOT EXISTS decls_mod ON decls(hieFile)"
 
+  execute_ conn "CREATE TABLE IF NOT EXISTS imports \
+                \( hieFile    TEXT NOT NULL \
+                \, mod     TEXT NOT NULL \
+                \, sl      INTEGER NOT NULL \
+                \, sc      INTEGER NOT NULL \
+                \, el      INTEGER NOT NULL \
+                \, ec      INTEGER NOT NULL \
+                \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
+                \)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS imports_mod ON imports(mod)"
+  execute_ conn "CREATE INDEX IF NOT EXISTS imports_hiefile ON imports(hieFile)"
+
+
   execute_ conn "CREATE TABLE IF NOT EXISTS defs \
                 \( hieFile    TEXT NOT NULL \
                 \, occ        TEXT NOT NULL \
@@ -216,6 +229,7 @@ data SkipOptions =
     , skipDecls :: Bool
     , skipDefs :: Bool
     , skipExports :: Bool
+    , skipImports :: Bool
     , skipTypes :: Bool
     -- ^ Note skip types will also skip type refs since it is dependent
     , skipTypeRefs :: Bool
@@ -230,6 +244,7 @@ defaultSkipOptions =
     , skipDecls = False
     , skipDefs = False
     , skipExports = False
+    , skipImports = False
     , skipTypes = False
     -- ^ Note skip types will also skip type refs since it is dependent
     , skipTypeRefs = False
@@ -323,12 +338,14 @@ addRefsFromLoaded_unsafe
 
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
-  let (rows,decls) = genRefsAndDecls path smod refmap
+  let AstInfo rows decls imports = genAstInfo path smod refmap
 
   unless (skipRefs skipOptions) $
     executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
   unless (skipDecls skipOptions) $
     executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?)" decls
+  unless (skipImports skipOptions) $
+    executeMany conn "INSERT INTO imports VALUES (?,?,?,?,?,?)" imports
 
   let defs = genDefRow path smod refmap
   unless (skipDefs skipOptions) $
