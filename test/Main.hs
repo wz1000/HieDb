@@ -1,10 +1,8 @@
 {-# LANGUAGE CPP #-}
 module Main where
 
-import qualified Data.Text as T
-import Database.SQLite.Simple
 import GHC.Paths (libdir, ghc)
-import HieDb (HieDb, HieModuleRow (..), ImportRow(..), LibDir (..), ModuleInfo (..), withHieDb, withHieFile, addRefsFromLoaded, deleteMissingRealFiles, getConn, defaultSkipOptions)
+import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb, withHieFile, addRefsFromLoaded, deleteMissingRealFiles, defaultSkipOptions)
 import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFileFromSource)
 import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..), SourceFile(..), runDbM)
@@ -17,7 +15,7 @@ import System.Process (callProcess, proc, readCreateProcessWithExitCode)
 import System.Environment (lookupEnv)
 import System.IO.Temp
 import System.IO
-import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, fit, it, runIO,
+import Test.Hspec (Expectation, Spec, afterAll_, around, beforeAll_, describe, hspec, it, runIO,
                    shouldBe, shouldEndWith)
 import Test.Orphans ()
 import Data.IORef
@@ -83,7 +81,7 @@ apiSpec = describe "api" $
               Just _  -> fail "Lookup suceeded unexpectedly"
 
         describe "deleteMissingRealFiles" $ do
-          fit "Should delete missing indexed files and nothing else" $ \conn -> do
+          it "Should delete missing indexed files and nothing else" $ \conn -> do
 
             originalMods <- getAllIndexedMods conn
 
@@ -126,14 +124,6 @@ apiSpec = describe "api" $
             -- Check that the other modules are still indexed
             afterMods <- getAllIndexedMods conn
             originalMods `shouldBe` afterMods
-
-            imports <- query_ (getConn conn) $ Query $ T.pack "SELECT * FROM imports"
-
-            printImports imports
-            putStrLn $ show (length imports) <> " imports found"
-
-printImports :: [ImportRow] -> IO ()
-printImports = mapM_ print
 
 cliSpec :: Spec
 cliSpec =

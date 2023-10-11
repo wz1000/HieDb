@@ -188,9 +188,6 @@ data ImportRow
     , importECol :: Int 
     }
 
-instance Show ImportRow where 
-  show = show . toRow
-
 instance FromRow ImportRow where 
   fromRow = 
     ImportRow 
