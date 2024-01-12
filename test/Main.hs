@@ -180,7 +180,7 @@ cliSpec =
       it "outputs the location of symbol when definition site can be found is indexed" $
         runHieDbCli ["point-defs", "Module1", "13", "29"]
           `succeedsWithStdin` unlines
-            [ "Sub.Module2:7:1-7:8"
+            [ "Sub.Module2:8:1-8:8"
             ]
       it "Fails with informative error message when there's no symbol at given point" $ do
         (exitCode, actualStdout, actualStderr) <- runHieDbCli ["point-defs", "Module1", "13", "13"]
@@ -196,39 +196,56 @@ cliSpec =
 
     describe "point-info" $ do
       it "gives information about symbol at specified location" $
-        runHieDbCli ["point-info", "Sub.Module2", "10", "10"]
+        runHieDbCli ["point-info", "Sub.Module2", "11", "11"]
           `succeedsWithStdin` unlines
-            [ "Span: test/data/Sub/Module2.hs:10:7-23"
+            [ "Span: test/data/Sub/Module2.hs:11:7-23"
             , "Constructors: {(ConDeclH98, ConDecl)}"
             , "Identifiers:"
-            , "Symbol:c:Data1Constructor1:Sub.Module2:main"
-            , "Data1Constructor1 defined at test/data/Sub/Module2.hs:10:7-23"
+            , "Symbol:c::Data1Constructor1:Sub.Module2:main"
+            , "Data1Constructor1 defined at test/data/Sub/Module2.hs:11:7-23"
 #if __GLASGOW_HASKELL__ >= 900
-            , "    Details:  Nothing {declaration of constructor bound at: test/data/Sub/Module2.hs:10:7-23}"
+            , "    Details:  Nothing {declaration of constructor bound at: test/data/Sub/Module2.hs:11:7-23}"
 #else
-            , "    IdentifierDetails Nothing {Decl ConDec (Just SrcSpanOneLine \"test/data/Sub/Module2.hs\" 10 7 24)}"
+            , "    IdentifierDetails Nothing {Decl ConDec (Just SrcSpanOneLine \"test/data/Sub/Module2.hs\" 11 7 24)}"
 #endif
             , "Types:\n"
             ]
       it "correctly prints type signatures" $
         runHieDbCli ["point-info", "Module1", "10", "10"]
           `succeedsWithStdin` unlines
+#if __GLASGOW_HASKELL__ >= 904
             [ "Span: test/data/Module1.hs:10:8-11"
-#if __GLASGOW_HASKELL__ >= 902
-            , "Constructors: {(XExpr, HsExpr), (HsVar, HsExpr)}"
-#elif __GLASGOW_HASKELL__ >= 900
             , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
-#else
-            , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
-#endif
             , "Identifiers:"
-            , "Symbol:v:even:GHC.Real:base"
+            , "$dIntegral defined at <no location info>"
+            , "    Details:  Just Integral Int {usage of evidence variable}"
+            , "Symbol:v::even:GHC.Real:base"
             , "even defined at <no location info>"
-#if __GLASGOW_HASKELL__ >= 900
+            , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
+#elif __GLASGOW_HASKELL__ >= 902
+            [ "Span: test/data/Module1.hs:10:8-11"
+            , "Constructors: {(XExpr, HsExpr), (HsVar, HsExpr)}"
+            , "Identifiers:"
+            , "Symbol:v::even:GHC.Real:base"
+            , "even defined at <no location info>"
+            , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
+            , "$dIntegral defined at <no location info>"
+            , "    Details:  Just Integral Int {usage of evidence variable}"
+#elif __GLASGOW_HASKELL__ >= 900
+            [ "Span: test/data/Module1.hs:10:8-11"
+            , "Constructors: {(HsVar, HsExpr), (XExpr, HsExpr)}"
+            , "Identifiers:"
+            , "Symbol:v::even:GHC.Real:base"
+            , "even defined at <no location info>"
             , "    Details:  Just forall a. Integral a => a -> Bool {usage}"
             , "$dIntegral defined at <no location info>"
             , "    Details:  Just Integral Int {usage of evidence variable}"
 #else
+            [ "Span: test/data/Module1.hs:10:8-11"
+            , "Constructors: {(HsVar, HsExpr), (HsWrap, HsExpr)}"
+            , "Identifiers:"
+            , "Symbol:v::even:GHC.Real:base"
+            , "even defined at <no location info>"
             , "    IdentifierDetails Just forall a. Integral a => a -> Bool {Use}"
 #endif
             , "Types:"
@@ -240,12 +257,12 @@ cliSpec =
     describe "name-def" $
       it "lookup definition of name" $
         runHieDbCli ["name-def", "showInt"]
-          `succeedsWithStdin` "Sub.Module2:7:1-7:8\n"
+          `succeedsWithStdin` "Sub.Module2:8:1-8:8\n"
 
     describe "type-def" $
       it "lookup definition of type" $
         runHieDbCli ["type-def", "Data1"]
-          `succeedsWithStdin` "Sub.Module2:9:1-11:28\n"
+          `succeedsWithStdin` "Sub.Module2:10:1-12:28\n"
 
     describe "cat" $
       describe "dumps module source stored in .hie file" $ do

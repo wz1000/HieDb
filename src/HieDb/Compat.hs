@@ -81,6 +81,9 @@ module HieDb.Compat (
     , IfaceTyCon(..)
     , field_label
     , dfs
+    , fieldNameSpace_maybe
+    , fieldName
+    , mkFastStringByteString
 ) where
 
 import Compat.HieTypes
@@ -228,4 +231,17 @@ dfs :: Ord a => Graph.AdjacencyMap a -> [a] -> [a]
 dfs = Graph.dfs
 #else
 dfs = flip Graph.dfs
+#endif
+
+fieldNameSpace_maybe :: NameSpace -> Maybe FastString
+#if __GLASGOW_HASKELL__ >= 907
+-- This is horrible, we can improve it once
+-- https://gitlab.haskell.org/ghc/ghc/-/issues/24244 is addressed
+fieldNameSpace_maybe ns = fieldOcc_maybe (mkOccName ns "")
+#endif
+fieldNameSpace_maybe _ = Nothing
+
+#if __GLASGOW_HASKELL__ < 907
+fieldName :: FastString -> NameSpace
+fieldName _ = varName
 #endif

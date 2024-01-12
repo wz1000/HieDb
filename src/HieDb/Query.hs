@@ -224,7 +224,7 @@ getVertices (getConn -> conn) ss = Set.toList <$> foldM f Set.empty ss
 
     one :: Symbol -> IO [Vertex]
     one s = do
-      let n = toNsChar (occNameSpace $ symName s) : occNameString (symName s)
+      let n = symName s
           m = moduleNameString $ moduleName $ symModule s
           u = unitString (moduleUnit $ symModule s)
       query conn "SELECT mods.mod, decls.hieFile, decls.occ, decls.sl, decls.sc, decls.el, decls.ec \

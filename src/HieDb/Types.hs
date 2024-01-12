@@ -15,6 +15,7 @@ import Prelude hiding (mod)
 import Data.IORef
 
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -90,32 +91,37 @@ instance ToField Fingerprint where
 instance FromField Fingerprint where
   fromField fld = readHexFingerprint . T.unpack <$> fromField fld
 
-toNsChar :: NameSpace -> Char
+toNsChar :: NameSpace -> String
 toNsChar ns
-  | isVarNameSpace ns = 'v'
-  | isDataConNameSpace ns = 'c'
-  | isTcClsNameSpace ns  = 't'
-  | isTvNameSpace ns = 'z'
+  | Just fld_par <- fieldNameSpace_maybe ns
+  = ('f':unpackFS fld_par) ++ ":"
+  | isVarNameSpace ns = "v:"
+  | isDataConNameSpace ns = "c:"
+  | isTcClsNameSpace ns  = "t:"
+  | isTvNameSpace ns = "z:"
   | otherwise = error "namespace not recognized"
 
-fromNsChar :: Char -> Maybe NameSpace
-fromNsChar 'v' = Just varName
-fromNsChar 'c' = Just dataName
-fromNsChar 't' = Just tcClsName
-fromNsChar 'z' = Just tvName
-fromNsChar _ = Nothing
+fromNsChar :: T.Text -> Maybe NameSpace
+fromNsChar ns
+  | Just ('f',fieldNameSpace) <- T.uncons ns
+  = Just (fieldName $ mkFastStringByteString $ T.encodeUtf8 fieldNameSpace)
+fromNsChar "v" = Just varName
+fromNsChar "c" = Just dataName
+fromNsChar "t" = Just tcClsName
+fromNsChar "z" = Just tvName
+fromNsChar _   = Nothing
 
 instance ToField OccName where
-  toField occ = SQLText $ T.pack $ toNsChar (occNameSpace occ) : occNameString occ
+  toField occ = SQLText $ T.pack $ toNsChar (occNameSpace occ) ++ occNameString occ
 instance FromField OccName where
   fromField fld =
     case fieldData fld of
       SQLText t ->
-        case T.uncons t of
-          Just (nsChar,occ)
-            | Just ns <- fromNsChar nsChar ->
-              return $ mkOccName ns (T.unpack occ)
-          _ -> returnError ConversionFailed fld "OccName encoding invalid"
+        case T.break (== ':') t of
+          (nsText,occ)
+            | Just ns <- fromNsChar nsText ->
+              return $ mkOccName ns (T.unpack $ T.tail occ)
+          _ -> returnError ConversionFailed fld ("OccName encoding invalid: " ++ show t)
       _ -> returnError Incompatible fld "Expected a SQL string representing an OccName"
 
 data HieModuleRow
@@ -266,21 +272,22 @@ data Symbol = Symbol
 
 instance Show Symbol where
     show s =  toNsChar (occNameSpace $ symName s)
-           :  ':'
-           :  occNameString (symName s)
-           <> ":"
-           <> moduleNameString (moduleName $ symModule s)
-           <> ":"
-        --    <> unitIdString (moduleUnit $ symModule s)
-           <> unitString (moduleUnit $ symModule s)
+           <> (  ':'
+              :  occNameString (symName s)
+              <> ":"
+              <> moduleNameString (moduleName $ symModule s)
+              <> ":"
+        --       <> unitIdString (moduleUnit $ symModule s)
+              <> unitString (moduleUnit $ symModule s)
+              )
 
 instance Read Symbol where
   readsPrec = const $ R.readP_to_S readSymbol
 
 readNameSpace :: R.ReadP NameSpace
 readNameSpace = do
-  c <- R.get
-  maybe R.pfail return (fromNsChar c)
+  c <- R.many1 R.get
+  maybe R.pfail return (fromNsChar $ T.pack c)
 
 readColon :: R.ReadP ()
 readColon = () <$ R.char ':'
