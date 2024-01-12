@@ -1,5 +1,9 @@
 # Revision history for hiedb
 
+## 0.5.0.1 -- 2024-01-12
+
+- Fix incorrect Show Symbol instance in 0.5.0.0
+
 ## 0.5.0.0 -- 2024-01-12
 
 - Handle duplicate record fields in GHC 9.8 instead of crashing
