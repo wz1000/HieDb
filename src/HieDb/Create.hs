@@ -331,7 +331,7 @@ addRefsFromLoaded_unsafe
 
   let defs = genDefRow path smod refmap
   unless (skipDefs skipOptions) $
-    forM defs $ \def -> do
+    void $ forM defs $ \def -> do
       execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
 
   let exports = generateExports path $ hie_exports hf
