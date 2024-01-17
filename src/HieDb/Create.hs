@@ -330,8 +330,9 @@ addRefsFromLoaded_unsafe
     executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?)" decls
 
   let defs = genDefRow path smod refmap
-  forM defs $ \def -> do
-    execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
+  unless (skipDefs skipOptions) $
+    void $ forM defs $ \def -> do
+      execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
 
   let exports = generateExports path $ hie_exports hf
   unless (skipExports skipOptions) $
