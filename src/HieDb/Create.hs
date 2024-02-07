@@ -16,9 +16,11 @@ import GHC
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.State.Strict (evalStateT)
 
 import qualified Data.Array as A
 import qualified Data.Map as M
+import qualified Data.Set as Set
 
 import Data.Int
 import Data.List ( isSuffixOf )
@@ -193,13 +195,13 @@ addTypeRefs
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> A.Array TypeIndex (Maybe Int64) -- ^ Maps TypeIndex to database ID assigned to record in @typenames@ table
   -> IO ()
-addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
+addTypeRefs db path hf ixs = evalStateT (mapM_ addTypesFromAst asts) Set.empty
   where
     arr :: A.Array TypeIndex HieTypeFlat
     arr = hie_types hf
     asts :: M.Map HiePath (HieAST TypeIndex)
     asts = getAsts $ hie_asts hf
-    addTypesFromAst :: HieAST TypeIndex -> IO ()
+    addTypesFromAst :: HieAST TypeIndex -> TypeIndexing ()
     addTypesFromAst ast = do
       mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
         $ mapMaybe (\x -> guard (not (all isOccurrence (identInfo x))) *> identType x)
