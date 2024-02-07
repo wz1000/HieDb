@@ -35,9 +35,8 @@ common common-options
                        -Wincomplete-uni-patterns
                        -Wpartial-fields
                        -Wredundant-constraints
-                       -Wunused-packages
                        -Wno-name-shadowing
-                       -Wno-unrecognised-pragmas
+
 executable hiedb
   import:              common-options
   hs-source-dirs:      exe

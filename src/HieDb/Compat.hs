@@ -1,5 +1,5 @@
 
-{-# LANGUAGE CPP, PatternSynonyms, ViewPatterns #-}
+{-# LANGUAGE CPP, PatternSynonyms, TupleSections, ViewPatterns #-}
 module HieDb.Compat (
     nodeInfo'
     , Unit
@@ -25,7 +25,11 @@ module HieDb.Compat (
     , mkVarOccFS
     , Name
     , nameSrcSpan
+#if __GLASGOW_HASKELL__ >= 903
+    , NameCacheUpdater
+#else
     , NameCacheUpdater(..)
+#endif
     , NameCache
     , nsNames
     , initNameCache
@@ -239,8 +243,9 @@ fieldNameSpace_maybe :: NameSpace -> Maybe FastString
 -- This is horrible, we can improve it once
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/24244 is addressed
 fieldNameSpace_maybe ns = fieldOcc_maybe (mkOccName ns "")
-#endif
+#else
 fieldNameSpace_maybe _ = Nothing
+#endif
 
 #if __GLASGOW_HASKELL__ < 907
 fieldName :: FastString -> NameSpace

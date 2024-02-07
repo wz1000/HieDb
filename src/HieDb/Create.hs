@@ -183,7 +183,7 @@ addArr (getConn -> conn) arr = do
             mod = moduleName m
             uid = moduleUnit m
         execute conn "INSERT INTO typenames(name,mod,unit) VALUES (?,?,?)" (occ,mod,uid)
-        Just . fromOnly . head <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
+        fmap fromOnly . listToMaybe <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
 
 {-| Add references to types from given @.hie@ file to DB. -}
 addTypeRefs

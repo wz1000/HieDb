@@ -39,6 +39,10 @@ import HieDb.Types
 import HieDb.Compat
 import Database.SQLite.Simple
 
+#if __GLASGOW_HASKELL__ >= 903
+import Control.Concurrent.MVar (readMVar)
+#endif
+
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
   where

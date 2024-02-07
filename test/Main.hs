@@ -200,7 +200,7 @@ cliSpec =
             [ "Span: test/data/Sub/Module2.hs:11:7-23"
             , "Constructors: {(ConDeclH98, ConDecl)}"
             , "Identifiers:"
-            , "Symbol:c::Data1Constructor1:Sub.Module2:main"
+            , "Symbol:c:Data1Constructor1:Sub.Module2:main"
             , "Data1Constructor1 defined at test/data/Sub/Module2.hs:11:7-23"
 #if __GLASGOW_HASKELL__ >= 900
             , "    Details:  Nothing {declaration of constructor bound at: test/data/Sub/Module2.hs:11:7-23}"
@@ -215,7 +215,7 @@ cliSpec =
             [ "Span: test/data/Module1.hs:10:8-10"
             , "Constructors: {(HsVar, HsExpr)}"
             , "Identifiers:"
-            , "Symbol:v::not:GHC.Classes:ghc-prim"
+            , "Symbol:v:not:GHC.Classes:ghc-prim"
             , "not defined at <no location info>"
 #if __GLASGOW_HASKELL__ >= 900
             , "    Details:  Just Bool -> Bool {usage}"
