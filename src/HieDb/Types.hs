@@ -271,15 +271,13 @@ data Symbol = Symbol
     } deriving (Eq, Ord)
 
 instance Show Symbol where
-    show s =  toNsChar (occNameSpace $ symName s)
-           <> (  ':'
-              :  occNameString (symName s)
+    show s =     toNsChar (occNameSpace $ symName s)
+              <> occNameString (symName s)
               <> ":"
               <> moduleNameString (moduleName $ symModule s)
               <> ":"
         --       <> unitIdString (moduleUnit $ symModule s)
               <> unitString (moduleUnit $ symModule s)
-              )
 
 instance Read Symbol where
   readsPrec = const $ R.readP_to_S readSymbol
