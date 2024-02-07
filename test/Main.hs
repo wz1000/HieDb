@@ -2,7 +2,7 @@
 module Main where
 
 import GHC.Paths (libdir, ghc)
-import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb, withHieFile, addRefsFromLoaded, deleteMissingRealFiles)
+import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb, withHieFile, addRefsFromLoaded, deleteMissingRealFiles, defaultSkipOptions)
 import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFileFromSource)
 import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..), SourceFile(..), runDbM)
@@ -388,4 +388,5 @@ testOpts = Options
   , reindex = False
   , keepMissing = False
   , srcBaseDir = Nothing
+  , skipIndexingOptions = defaultSkipOptions
   }
