@@ -5,7 +5,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE CPP #-}
 module HieDb.Utils where
@@ -39,7 +38,10 @@ import Data.IORef
 import HieDb.Types
 import HieDb.Compat
 import Database.SQLite.Simple
-import Control.Concurrent
+
+#if __GLASGOW_HASKELL__ >= 903
+import Control.Concurrent.MVar (readMVar)
+#endif
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> IO ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0

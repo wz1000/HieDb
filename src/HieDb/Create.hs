@@ -183,7 +183,7 @@ addArr (getConn -> conn) arr = do
             mod = moduleName m
             uid = moduleUnit m
         execute conn "INSERT INTO typenames(name,mod,unit) VALUES (?,?,?)" (occ,mod,uid)
-        Just . fromOnly . head <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
+        fmap fromOnly . listToMaybe <$> query conn "SELECT id FROM typenames WHERE name = ? AND mod = ? AND unit = ?" (occ,mod,uid)
 
 {-| Add references to types from given @.hie@ file to DB. -}
 addTypeRefs
@@ -201,7 +201,7 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
       mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
-        $ mapMaybe (\x -> guard (any (not . isOccurrence) (identInfo x)) *> identType x)
+        $ mapMaybe (\x -> guard (not (all isOccurrence (identInfo x))) *> identType x)
         $ M.elems
         $ nodeIdentifiers
         $ nodeInfo' ast
@@ -222,7 +222,7 @@ data SkipOptions =
     deriving Show
 
 defaultSkipOptions :: SkipOptions
-defaultSkipOptions = 
+defaultSkipOptions =
   SkipOptions
     {
     skipRefs = False
@@ -256,7 +256,7 @@ addRefsFrom c@(getConn -> conn) mSrcBaseDir skipOptions path = do
                 (\srcBaseDir ->  do
                     srcFullPath <- makeAbsolute (srcBaseDir </> hie_hs_file hieFile)
                     fileExists <- doesFileExist srcFullPath
-                    pure $ if fileExists then RealFile srcFullPath else (FakeFile Nothing)
+                    pure $ if fileExists then RealFile srcFullPath else FakeFile Nothing
                 )
                 mSrcBaseDir
         addRefsFromLoadedInternal c path srcfile hash skipOptions hieFile
@@ -323,7 +323,7 @@ addRefsFromLoaded_unsafe
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
   let (rows,decls) = genRefsAndDecls path smod refmap
-  
+
   unless (skipRefs skipOptions) $
     executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
   unless (skipDecls skipOptions) $
@@ -331,7 +331,7 @@ addRefsFromLoaded_unsafe
 
   let defs = genDefRow path smod refmap
   unless (skipDefs skipOptions) $
-    void $ forM defs $ \def -> do
+    forM_ defs $ \def ->
       execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
 
   let exports = generateExports path $ hie_exports hf

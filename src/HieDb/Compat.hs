@@ -25,7 +25,11 @@ module HieDb.Compat (
     , mkVarOccFS
     , Name
     , nameSrcSpan
+#if __GLASGOW_HASKELL__ >= 903
+    , NameCacheUpdater
+#else
     , NameCacheUpdater(..)
+#endif
     , NameCache
     , nsNames
     , initNameCache
@@ -133,14 +137,15 @@ import SysTools
 import qualified Avail
 #endif
 
+import qualified Algebra.Graph.AdjacencyMap           as Graph
+import qualified Algebra.Graph.AdjacencyMap.Algorithm as Graph
+
 #if __GLASGOW_HASKELL__ >= 900
 import GHC.Types.SrcLoc
 import Compat.HieUtils
 
 import qualified Data.Map as M
 import qualified Data.Set as S
-import qualified Algebra.Graph.AdjacencyMap           as Graph
-import qualified Algebra.Graph.AdjacencyMap.Algorithm as Graph
 
 
 -- nodeInfo' :: Ord a => HieAST a -> NodeInfo a
@@ -238,8 +243,9 @@ fieldNameSpace_maybe :: NameSpace -> Maybe FastString
 -- This is horrible, we can improve it once
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/24244 is addressed
 fieldNameSpace_maybe ns = fieldOcc_maybe (mkOccName ns "")
-#endif
+#else
 fieldNameSpace_maybe _ = Nothing
+#endif
 
 #if __GLASGOW_HASKELL__ < 907
 fieldName :: FastString -> NameSpace
