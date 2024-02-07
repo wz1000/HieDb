@@ -241,7 +241,7 @@ progress hndl total cur act f = do
     Just w -> do
       hPutStr hndl $ replicate w ' '
       hPutStr hndl "\r"
-      pure $ take (w-8) $ msg'
+      pure $ take (w-8) msg'
   liftIO $ hPutStr hndl msg
   x <- act f
   if x
@@ -529,7 +529,7 @@ reportRefSpans opts xs = do
                   beforeLines = takeEnd n beforeLines'
                   afterLines  = take    n afterLines'
 
-                  (beforeChars,during') = BS.splitAt (sc-1) $ BS.concat $ intersperse "\n" $ duringLines
+                  (beforeChars,during') = BS.splitAt (sc-1) $ BS.concat $ intersperse "\n" duringLines
                   (during,afterChars) = BS.splitAt (BS.length during' - (BS.length (last duringLines) - ec) - 1) during'
 
                   before = BS.unlines beforeLines <> beforeChars

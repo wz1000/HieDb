@@ -201,7 +201,7 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
       mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
-        $ mapMaybe (\x -> guard (any (not . isOccurrence) (identInfo x)) *> identType x)
+        $ mapMaybe (\x -> guard (not (all isOccurrence (identInfo x))) *> identType x)
         $ M.elems
         $ nodeIdentifiers
         $ nodeInfo' ast
@@ -256,7 +256,7 @@ addRefsFrom c@(getConn -> conn) mSrcBaseDir skipOptions path = do
                 (\srcBaseDir ->  do
                     srcFullPath <- makeAbsolute (srcBaseDir </> hie_hs_file hieFile)
                     fileExists <- doesFileExist srcFullPath
-                    pure $ if fileExists then RealFile srcFullPath else (FakeFile Nothing)
+                    pure $ if fileExists then RealFile srcFullPath else FakeFile Nothing
                 )
                 mSrcBaseDir
         addRefsFromLoadedInternal c path srcfile hash skipOptions hieFile

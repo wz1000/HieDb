@@ -40,7 +40,7 @@ getAllIndexedMods :: HieDb -> IO [HieModuleRow]
 getAllIndexedMods (getConn -> conn) = query_ conn "SELECT * FROM mods"
 
 {-| List all module exports -}
-getAllIndexedExports :: HieDb -> IO [(ExportRow)]
+getAllIndexedExports :: HieDb -> IO [ExportRow]
 getAllIndexedExports (getConn -> conn) = query_ conn "SELECT * FROM exports"
 
 {-| List all exports of the given module -}

@@ -1,5 +1,5 @@
 
-{-# LANGUAGE CPP, PatternSynonyms, ViewPatterns, TupleSections #-}
+{-# LANGUAGE CPP, PatternSynonyms, ViewPatterns #-}
 module HieDb.Compat (
     nodeInfo'
     , Unit
