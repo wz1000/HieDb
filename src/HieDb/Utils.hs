@@ -49,10 +49,10 @@ import Control.Concurrent.MVar (readMVar)
 
 -- Each AST Node can have a lot of repetitive type information.
 -- We use this to make sure that each occurrence of a type
--- (Identified by Int64 id of that type within typenames table)
+-- (identified by Int64 id of that type within typenames table)
 -- is inserted exactly once per each RealSrcSpan in which it occurs and per
--- depth of that type within the tree structure representing the type (Int)
-type TypeIndexing a = StateT (Set (RealSrcSpan, Int64, Int)) IO a
+-- depth (Int) of that type within the tree structure representing the type
+type TypeIndexing a = StateT (Set (Int64, Int)) IO a
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> TypeIndexing ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
@@ -68,9 +68,9 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
         Just occ -> do
           let ref = TypeRef occ hf d sl sc el ec
           indexed <- get
-          when (Set.notMember (sp, occ, d) indexed) $ do
+          when (Set.notMember (occ, d) indexed) $ do
             liftIO $ execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?)" ref
-            put $ Set.insert (sp, occ, d) indexed
+            put $ Set.insert (occ, d) indexed
       let next = go (d+1)
       case arr A.! i of
         HTyVarTy _ -> pure ()

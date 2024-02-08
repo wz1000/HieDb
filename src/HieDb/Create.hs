@@ -195,15 +195,16 @@ addTypeRefs
   -> HieFile -- ^ Data loaded from the @.hie@ file
   -> A.Array TypeIndex (Maybe Int64) -- ^ Maps TypeIndex to database ID assigned to record in @typenames@ table
   -> IO ()
-addTypeRefs db path hf ixs = evalStateT (mapM_ addTypesFromAst asts) Set.empty
+addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
   where
     arr :: A.Array TypeIndex HieTypeFlat
     arr = hie_types hf
     asts :: M.Map HiePath (HieAST TypeIndex)
     asts = getAsts $ hie_asts hf
-    addTypesFromAst :: HieAST TypeIndex -> TypeIndexing ()
+    addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
-      mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
+      flip evalStateT Set.empty
+        $ mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
         $ mapMaybe (\x -> guard (not (all isOccurrence (identInfo x))) *> identType x)
         $ M.elems
         $ nodeIdentifiers
