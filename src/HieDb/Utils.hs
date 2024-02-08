@@ -43,7 +43,7 @@ import qualified Data.IntSet as ISet
 import qualified Data.IntMap.Strict as IMap
 import Data.IntMap.Strict (IntMap)
 import Data.IntSet (IntSet)
-import Control.Monad (when)
+import Control.Monad (unless)
 
 #if __GLASGOW_HASKELL__ >= 903
 import Control.Concurrent.MVar (readMVar)
@@ -75,7 +75,7 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
           let ref = TypeRef occ hf depth sl sc el ec
           indexed <- get
           let isTypeIndexed = ISet.member (fromIntegral occ) (IMap.findWithDefault ISet.empty depth indexed)
-          when isTypeIndexed $ do
+          unless isTypeIndexed $ do
             liftIO $ execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?)" ref
             put $ IMap.alter (\case
                   Nothing -> Just $ ISet.singleton (fromIntegral occ)
