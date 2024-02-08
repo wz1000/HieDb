@@ -39,20 +39,26 @@ import HieDb.Types
 import HieDb.Compat
 import Database.SQLite.Simple
 import Control.Monad.State.Strict (StateT, get, put)
-import Data.Set (Set)
-import qualified Data.Set as Set
+import qualified Data.IntSet as ISet
+import qualified Data.IntMap.Strict as IMap
+import Data.IntMap.Strict (IntMap)
+import Data.IntSet (IntSet)
 import Control.Monad (when)
 
 #if __GLASGOW_HASKELL__ >= 903
 import Control.Concurrent.MVar (readMVar)
 #endif
 
--- Each AST Node can have a lot of repetitive type information.
--- We use this to make sure that each occurrence of a type
--- (identified by Int64 id of that type within typenames table)
--- is inserted exactly once per each RealSrcSpan in which it occurs and per
--- depth (Int) of that type within the tree structure representing the type
-type TypeIndexing a = StateT (Set (Int64, Int)) IO a
+-- Each AST Node can have a lot of repetitive type information,
+-- esp. when deriving is involved.
+-- This StateT state keeps track of which types in AST we already indexed
+-- to avoid having repeated (Depth, Type) inserted under the same RealSrcSpan.
+--
+-- This `IntMap IntSet` is morally `Map Depth (Set TypeIndex)` mapping
+-- the depth (of a type within tree structure of types - ends up as typerefs.depth)
+-- to a list of type IDs (identifiers of types assigned as id within typenames table)
+-- that we already indexed.
+type TypeIndexing a = StateT (IntMap IntSet) IO a
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> TypeIndexing ()
 addTypeRef (getConn -> conn) hf arr ixs sp = go 0
@@ -62,16 +68,20 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
     el = srcSpanEndLine sp
     ec = srcSpanEndCol sp
     go :: Int -> TypeIndex -> TypeIndexing ()
-    go d i = do
+    go depth i = do
       case ixs A.! i of
         Nothing -> pure ()
         Just occ -> do
-          let ref = TypeRef occ hf d sl sc el ec
+          let ref = TypeRef occ hf depth sl sc el ec
           indexed <- get
-          when (Set.notMember (occ, d) indexed) $ do
+          let isTypeIndexed = ISet.member (fromIntegral occ) (IMap.findWithDefault ISet.empty depth indexed)
+          when isTypeIndexed $ do
             liftIO $ execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?)" ref
-            put $ Set.insert (occ, d) indexed
-      let next = go (d+1)
+            put $ IMap.alter (\case
+                  Nothing -> Just $ ISet.singleton (fromIntegral occ)
+                  Just s -> Just $ ISet.insert (fromIntegral occ) s
+                ) depth indexed
+      let next = go (depth + 1)
       case arr A.! i of
         HTyVarTy _ -> pure ()
 #if __GLASGOW_HASKELL__ >= 808
@@ -88,7 +98,7 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 #endif
         HQualTy a b -> mapM_ next [a,b]
         HLitTy _ -> pure ()
-        HCastTy a -> go d a
+        HCastTy a -> go depth a
         HCoercionTy -> pure ()
 
 makeNc :: IO NameCache

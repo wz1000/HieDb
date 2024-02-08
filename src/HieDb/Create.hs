@@ -20,7 +20,7 @@ import Control.Monad.State.Strict (evalStateT)
 
 import qualified Data.Array as A
 import qualified Data.Map as M
-import qualified Data.Set as Set
+import qualified Data.IntMap.Strict as IMap
 
 import Data.Int
 import Data.List ( isSuffixOf )
@@ -203,7 +203,7 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
     asts = getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
-      flip evalStateT Set.empty
+      flip evalStateT IMap.empty
         $ mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
         $ mapMaybe (\x -> guard (not (all isOccurrence (identInfo x))) *> identType x)
         $ M.elems
