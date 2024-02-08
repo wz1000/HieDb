@@ -37,7 +37,7 @@ import HieDb.Types
 import HieDb.Utils
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 7
+sCHEMA_VERSION = 8
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
