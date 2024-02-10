@@ -16,9 +16,11 @@ import GHC
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.State.Strict (evalStateT)
 
 import qualified Data.Array as A
 import qualified Data.Map as M
+import qualified Data.IntMap.Strict as IMap
 
 import Data.Int
 import Data.List ( isSuffixOf )
@@ -35,7 +37,7 @@ import HieDb.Types
 import HieDb.Utils
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 7
+sCHEMA_VERSION = 8
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
@@ -201,7 +203,8 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
     asts = getAsts $ hie_asts hf
     addTypesFromAst :: HieAST TypeIndex -> IO ()
     addTypesFromAst ast = do
-      mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
+      flip evalStateT IMap.empty
+        $ mapM_ (addTypeRef db path arr ixs (nodeSpan ast))
         $ mapMaybe (\x -> guard (not (all isOccurrence (identInfo x))) *> identType x)
         $ M.elems
         $ nodeIdentifiers
