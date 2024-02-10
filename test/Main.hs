@@ -88,6 +88,7 @@ apiSpec = describe "api" $
             -- Index a new real file, and delete it
             let contents = unlines
                   [ "module Test123 where"
+                  , "import Prelude"
                   , "foobarbaz :: Int"
                   , "foobarbaz = 1"
                   ]
@@ -123,7 +124,6 @@ apiSpec = describe "api" $
             -- Check that the other modules are still indexed
             afterMods <- getAllIndexedMods conn
             originalMods `shouldBe` afterMods
-
 
 cliSpec :: Spec
 cliSpec =
