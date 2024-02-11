@@ -1,12 +1,27 @@
 # Revision history for hiedb
 
+## 0.6.0.0 -- 2024-12-11
+
+* Add index on column `unit` of table `mods`
+* Add new table `imports` which indexes import statements
+* Add new cli options that allow selectively skipping indexing of some things:
+    `--skip-refs`              Skip refs table when indexing
+    `--skip-decls`             Skip decls table when indexing
+    `--skip-defs`              Skip defs table when indexing
+    `--skip-exports`           Skip exports table when indexing
+    `--skip-imports`           Skip imports table when indexing
+    `--skip-types`             Skip types and typerefs table when indexing
+    `--skip-typerefs`          Skip typerefs table when indexing
+* Fix a bug where duplicate entries were inserted into `typerefs` table during indexing
+* Fix a bug in `searchDef` query which was mistakenly not including ':' when searching by occurrence names
+
 ## 0.5.0.1 -- 2024-01-12
 
-- Fix incorrect Show Symbol instance in 0.5.0.0
+* Fix incorrect Show Symbol instance in 0.5.0.0
 
 ## 0.5.0.0 -- 2024-01-12
 
-- Handle duplicate record fields in GHC 9.8 instead of crashing
+* Handle duplicate record fields in GHC 9.8 instead of crashing
 
 ## 0.4.4.0 -- 2023-11-13
 * Add `--src-base-dir` option allowing for src file indexing in `mods`
