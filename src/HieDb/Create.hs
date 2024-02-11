@@ -227,8 +227,7 @@ addTypeRefs db path hf ixs = mapM_ addTypesFromAst asts
 -- | Options to skip indexing phases
 data SkipOptions =
   SkipOptions
-    {
-    skipRefs :: Bool
+    { skipRefs :: Bool
     , skipDecls :: Bool
     , skipDefs :: Bool
     , skipExports :: Bool
@@ -242,8 +241,7 @@ data SkipOptions =
 defaultSkipOptions :: SkipOptions
 defaultSkipOptions =
   SkipOptions
-    {
-    skipRefs = False
+    { skipRefs = False
     , skipDecls = False
     , skipDefs = False
     , skipExports = False

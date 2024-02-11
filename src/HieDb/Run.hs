@@ -143,8 +143,7 @@ optParser defdb colr
         types <- switch (long "skip-types" <> help "Skip types and typerefs table when indexing")
         typeRefs <- switch (long "skip-typerefs" <> help "Skip typerefs table when indexing")
         pure $ SkipOptions
-          {
-          skipRefs = refs
+          { skipRefs = refs
           , skipDecls = decls
           , skipDefs = defs
           , skipExports = exports
