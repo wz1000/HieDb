@@ -17,10 +17,8 @@ import Compat.HieBin
 import Compat.HieTypes
 import qualified Compat.HieTypes as HieTypes
 import Compat.HieUtils
-import Control.Monad (guard)
 import qualified Data.Map as M
 import qualified Data.Set as S
-
 
 import System.Directory
 import System.FilePath
@@ -43,7 +41,7 @@ import qualified Data.IntSet as ISet
 import qualified Data.IntMap.Strict as IMap
 import Data.IntMap.Strict (IntMap)
 import Data.IntSet (IntSet)
-import Control.Monad (unless)
+import Control.Monad (guard, unless)
 
 #if __GLASGOW_HASKELL__ >= 903
 import Control.Concurrent.MVar (readMVar)
@@ -158,10 +156,9 @@ pointCommand hf (sl,sc) mep k =
 dynFlagsForPrinting :: LibDir -> IO DynFlags
 dynFlagsForPrinting (LibDir libdir) = do
   systemSettings <- initSysTools libdir
-#if __GLASGOW_HASKELL__ >= 905
   return $ defaultDynFlags systemSettings
-#else
-  return $ defaultDynFlags systemSettings $ LlvmConfig [] []
+#if __GLASGOW_HASKELL__ < 905
+    (LlvmConfig [] [])
 #endif
 
 isCons :: String -> Bool

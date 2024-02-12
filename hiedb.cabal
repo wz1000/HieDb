@@ -85,7 +85,6 @@ test-suite hiedb-tests
   build-tool-depends: hiedb:hiedb
   build-depends:      directory
                     , filepath
-                    , ghc >= 8.6
                     , ghc-paths
                     , hiedb
                     , hspec
