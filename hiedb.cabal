@@ -36,6 +36,7 @@ common common-options
                        -Wincomplete-uni-patterns
                        -Wpartial-fields
                        -Wredundant-constraints
+                       -Wunused-packages
                        -Wno-name-shadowing
 
 executable hiedb

@@ -84,18 +84,10 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
       let next = go (depth + 1)
       case arr A.! i of
         HTyVarTy _ -> pure ()
-#if __GLASGOW_HASKELL__ >= 808
         HAppTy x (HieArgs xs) -> mapM_ next (x:map snd xs)
-#else
-        HAppTy x y -> mapM_ next [x,y]
-#endif
         HTyConApp _ (HieArgs xs) -> mapM_ (next . snd) xs
         HForAllTy ((_ , a),_) b -> mapM_ next [a,b]
-#if __GLASGOW_HASKELL__ >= 900
         HFunTy a b c -> mapM_ next [a,b,c]
-#else
-        HFunTy a b -> mapM_ next [a,b]
-#endif
         HQualTy a b -> mapM_ next [a,b]
         HLitTy _ -> pure ()
         HCastTy a -> go depth a
@@ -148,11 +140,7 @@ findDefInFile occ mdl file = do
 #endif
   return $ case lookupOrigNameCache nsns mdl occ of
     Just name -> case nameSrcSpan name of
-#if __GLASGOW_HASKELL__ >= 900
       RealSrcSpan sp _ -> Right (sp, mdl)
-#else
-      RealSrcSpan sp -> Right (sp, mdl)
-#endif
       UnhelpfulSpan msg -> Left $ NameUnhelpfulSpan name (unpackFS $ unhelpfulSpanFS msg)
     Nothing -> Left $ NameNotFound occ (Just $ moduleName mdl) (Just $ moduleUnit mdl)
 
@@ -169,18 +157,11 @@ pointCommand hf (sl,sc) mep k =
 
 dynFlagsForPrinting :: LibDir -> IO DynFlags
 dynFlagsForPrinting (LibDir libdir) = do
-  systemSettings <- initSysTools
-#if __GLASGOW_HASKELL__ >= 808
-                    libdir
-#else
-                    (Just libdir)
-#endif
+  systemSettings <- initSysTools libdir
 #if __GLASGOW_HASKELL__ >= 905
   return $ defaultDynFlags systemSettings
-#elif __GLASGOW_HASKELL__ >= 810
-  return $ defaultDynFlags systemSettings $ LlvmConfig [] []
 #else
-  return $ defaultDynFlags systemSettings ([], [])
+  return $ defaultDynFlags systemSettings $ LlvmConfig [] []
 #endif
 
 isCons :: String -> Bool
@@ -195,10 +176,10 @@ data AstInfo =
     , astInfoImports :: [ImportRow]
     }
 
-instance Semigroup AstInfo where 
+instance Semigroup AstInfo where
   AstInfo r1 d1 i1 <> AstInfo r2 d2 i2 = AstInfo (r1 <> r2) (d1 <> d2) (i1 <> i2)
 
-instance Monoid AstInfo where 
+instance Monoid AstInfo where
   mempty = AstInfo [] [] []
 
 genAstInfo :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> AstInfo
@@ -262,11 +243,7 @@ genDefRow path smod refmap = genRows $ M.toList refmap
   where
     genRows = mapMaybe go
     getSpan name dets
-#if __GLASGOW_HASKELL__ >= 900
       | RealSrcSpan sp _ <- nameSrcSpan name = Just sp
-#else
-      | RealSrcSpan sp <- nameSrcSpan name = Just sp
-#endif
       | otherwise = do
           (sp, _dets) <- find defSpan dets
           pure sp

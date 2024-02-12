@@ -392,11 +392,7 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
         reportAmbiguousErr opts (Left $ NoNameAtPoint target sp)
       forM_ names $ \name -> do
         case nameSrcSpan name of
-#if __GLASGOW_HASKELL__ >= 900
           RealSrcSpan dsp _ -> do
-#else
-          RealSrcSpan dsp -> do
-#endif
             unless (quiet opts) $
               hPutStrLn stderr $ unwords ["Name", ppName opts (nameOccName name),"at",ppSpan opts sp,"is defined at:"]
             contents <- case nameModule_maybe name of
