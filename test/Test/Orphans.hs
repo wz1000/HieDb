@@ -1,13 +1,10 @@
-{-# LANGUAGE StandaloneDeriving, CPP #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Test.Orphans where
 
 import HieDb.Compat
 import HieDb.Types
 
-#if __GLASGOW_HASKELL__ < 902
-instance Show ModuleName where show = moduleNameString
-#endif
 instance Show OccName where show = occNameString
 instance Show Name where
   show n =
