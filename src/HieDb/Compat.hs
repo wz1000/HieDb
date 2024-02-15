@@ -92,7 +92,6 @@ module HieDb.Compat (
 
 import Compat.HieTypes
 
-#if __GLASGOW_HASKELL__ >= 900
 import GHC.Data.FastString as FS
 import GHC.Driver.Session
 import GHC.Iface.Env
@@ -118,29 +117,10 @@ import GHC.Utils.Outputable (ppr, (<+>), hang, text)
 #else
 import GHC.Utils.Outputable (showSDoc, ppr, (<+>), hang, text)
 #endif
-#else
-import DynFlags
-import FastString
-import Fingerprint
-import FieldLabel
-import Module
-import Name
-import NameCache
-import Outputable (showSDoc, ppr, (<+>), hang, text)
-#if __GLASGOW_HASKELL__ < 903
-import IfaceEnv (NameCacheUpdater(..))
-#endif
-import IfaceType
-import UniqSupply
-import SrcLoc
-import SysTools
-import qualified Avail
-#endif
 
 import qualified Algebra.Graph.AdjacencyMap           as Graph
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as Graph
 
-#if __GLASGOW_HASKELL__ >= 900
 import GHC.Types.SrcLoc
 import Compat.HieUtils
 
@@ -163,21 +143,6 @@ combineNodeInfo' :: Ord a => NodeInfo a -> NodeInfo a -> NodeInfo a
                                         GT -> b : mergeSorted la bs
     mergeSorted as [] = as
     mergeSorted [] bs = bs
-#else
-import qualified FastString as FS
-
-nodeInfo' :: HieAST TypeIndex -> NodeInfo TypeIndex
-nodeInfo' = nodeInfo
-type Unit = UnitId
-unitString :: Unit -> String
-unitString = unitIdString
-stringToUnit :: String -> Unit
-stringToUnit = stringToUnitId
-moduleUnit :: Module -> Unit
-moduleUnit = moduleUnitId
-unhelpfulSpanFS :: FS.FastString -> FS.FastString
-unhelpfulSpanFS = id
-#endif
 
 #if __GLASGOW_HASKELL__ < 902
 type HiePath = FastString

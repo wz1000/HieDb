@@ -202,11 +202,7 @@ cliSpec =
             , "Identifiers:"
             , "Symbol:c:Data1Constructor1:Sub.Module2:main"
             , "Data1Constructor1 defined at test/data/Sub/Module2.hs:11:7-23"
-#if __GLASGOW_HASKELL__ >= 900
             , "    Details:  Nothing {declaration of constructor bound at: test/data/Sub/Module2.hs:11:7-23}"
-#else
-            , "    IdentifierDetails Nothing {Decl ConDec (Just SrcSpanOneLine \"test/data/Sub/Module2.hs\" 11 7 24)}"
-#endif
             , "Types:\n"
             ]
       it "correctly prints type signatures" $
@@ -217,11 +213,7 @@ cliSpec =
             , "Identifiers:"
             , "Symbol:v:not:GHC.Classes:ghc-prim"
             , "not defined at <no location info>"
-#if __GLASGOW_HASKELL__ >= 900
             , "    Details:  Just Bool -> Bool {usage}"
-#else
-            , "    IdentifierDetails Just Bool -> Bool {Use}"
-#endif
             , "Types:"
             , "Bool -> Bool"
             , ""

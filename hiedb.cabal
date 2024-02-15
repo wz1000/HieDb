@@ -36,6 +36,7 @@ common common-options
                        -Wincomplete-uni-patterns
                        -Wpartial-fields
                        -Wredundant-constraints
+                       -Wunused-packages
                        -Wno-name-shadowing
 
 executable hiedb
@@ -84,7 +85,6 @@ test-suite hiedb-tests
   build-tool-depends: hiedb:hiedb
   build-depends:      directory
                     , filepath
-                    , ghc >= 8.6
                     , ghc-paths
                     , hiedb
                     , hspec

@@ -1,6 +1,6 @@
 # Revision history for hiedb
 
-## 0.6.0.0 -- 2024-12-11
+## 0.6.0.0 -- 2024-02-11
 
 * Add index on column `unit` of table `mods`
 * Add new table `imports` which indexes import statements
@@ -24,8 +24,10 @@
 * Handle duplicate record fields in GHC 9.8 instead of crashing
 
 ## 0.4.4.0 -- 2023-11-13
+
 * Add `--src-base-dir` option allowing for src file indexing in `mods`
-* 9.8.1 support
+* Support GHC 9.8.1
+* Drop support for GHC 8.10
 * Add `lookupHieFileFromHash`
 * Add `lookupPackage`
 * Add `removeDependencySrcFiles`
