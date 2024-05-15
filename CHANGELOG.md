@@ -1,5 +1,9 @@
 # Revision history for hiedb
 
+## Unreleased
+
+* Add support for GHC 9.10
+
 ## 0.6.0.0 -- 2024-02-11
 
 * Add index on column `unit` of table `mods`
