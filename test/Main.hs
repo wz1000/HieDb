@@ -193,9 +193,9 @@ cliSpec =
         exitCode `shouldBe` ExitFailure 1
         actualStderr `shouldBe`
 #if __GLASGOW_HASKELL__ >= 9010
-          "Couldn't find name: $ from module GHC.Base(base)\n"
-#else
           "Couldn't find name: $ from module GHC.Internal.Base(ghc-internal)\n"
+#else
+          "Couldn't find name: $ from module GHC.Base(base)\n"
 #endif
 
     describe "point-info" $ do
