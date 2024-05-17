@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-* Add support for GHC 9.10
+* Bump base and ghc version bounds to support GHC 9.10
 
 ## 0.6.0.0 -- 2024-02-11
 
