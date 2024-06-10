@@ -191,7 +191,12 @@ cliSpec =
         (exitCode, actualStdout, actualStderr) <- runHieDbCli ["point-defs", "Module1", "13", "24"]
         actualStdout `shouldBe` ""
         exitCode `shouldBe` ExitFailure 1
-        actualStderr `shouldBe` "Couldn't find name: $ from module GHC.Base(base)\n"
+        actualStderr `shouldBe`
+#if MIN_VERSION_base(4,20,0)
+          "Couldn't find name: $ from module GHC.Internal.Base(ghc-internal)\n"
+#else
+          "Couldn't find name: $ from module GHC.Base(base)\n"
+#endif
 
     describe "point-info" $ do
       it "gives information about symbol at specified location" $
