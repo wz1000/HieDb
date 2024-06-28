@@ -83,6 +83,7 @@ data Options
   , srcBaseDir :: Maybe FilePath
   , skipIndexingOptions :: SkipOptions
   }
+  deriving Show
 
 data Command
   = Init
@@ -107,6 +108,7 @@ data Command
   | Unreachable [Symbol]
   | Html [Symbol]
   | GCTypeNames
+  deriving Show
 
 progParseInfo :: FilePath -> Bool -> ParserInfo (Options, Command)
 progParseInfo db colr = info (progParser db colr <**> helper)
