@@ -1,6 +1,5 @@
 
 {-# LANGUAGE CPP, PatternSynonyms, ViewPatterns, TupleSections #-}
-{-# OPTIONS_GHC -Wno-orphans #-} -- ghc 9.0 doesn't have Show instance for ModuleName
 module HieDb.Compat (
     nodeInfo'
     , Unit
@@ -216,9 +215,4 @@ fieldNameSpace_maybe _ = Nothing
 #if __GLASGOW_HASKELL__ < 907
 fieldName :: FastString -> NameSpace
 fieldName _ = varName
-#endif
-
-#if __GLASGOW_HASKELL__ < 902
-instance Show ModuleName where
-    show = moduleNameString
 #endif
