@@ -372,8 +372,8 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
           Just mod -> do
             reportRefs opts =<< findReferences conn False (nameOccName name) (Just $ moduleName mod) (Just $ moduleUnit mod) []
           Nothing -> do
-            let refmap = generateReferencesMap (getAsts $ hie_asts hf)
-                refs = map (toRef . fst) $ M.findWithDefault [] (Right name) refmap
+            let refmap = generateReferencesMap2 $ getAsts $ hie_asts hf
+                refs = map (\(_, spn, _) -> toRef spn) $ M.findWithDefault [] (Right name) refmap
                 toRef spn = (hie_module hf
                             ,(srcSpanStartLine spn , srcSpanStartCol spn)
                             ,(srcSpanEndLine spn , srcSpanEndCol spn)
