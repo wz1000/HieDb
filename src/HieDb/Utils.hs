@@ -179,18 +179,17 @@ instance Semigroup AstInfo where
 instance Monoid AstInfo where
   mempty = AstInfo [] [] []
 
-genAstInfo :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> AstInfo
+genAstInfo :: FilePath -> Module -> RefMap2 a -> AstInfo
 genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
   where
     flat = concatMap (\(a,xs) -> map (a,) xs)
-    genRows = foldMap go
-    go = mkAstInfo
+    genRows = foldMap mkAstInfo
 
     mkAstInfo x = AstInfo (maybeToList $ goRef x) (maybeToList $ goDec x) (maybeToList $ goImport x)
 
-    goRef (Right name, (sp,_))
+    goRef (Right name, (nodeOrigin, sp, _))
       | Just mod <- nameModule_maybe name = Just $
-          RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec
+          RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec (nodeOrigin == GeneratedInfo)
           where
             occ = nameOccName name
             sl = srcSpanStartLine sp
@@ -199,7 +198,7 @@ genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
             ec = srcSpanEndCol sp
     goRef _ = Nothing
 
-    goImport (Left modName, (sp, IdentifierDetails _ contextInfos)) = do
+    goImport (Left modName, (_, sp, IdentifierDetails _ contextInfos)) = do
           _ <- guard $ not $ S.disjoint contextInfos $ S.fromList [IEThing Import, IEThing ImportAs, IEThing ImportHiding]
           let
             sl = srcSpanStartLine sp
@@ -209,7 +208,7 @@ genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
           Just $ ImportRow path modName sl sc el ec
     goImport _ = Nothing
 
-    goDec (Right name,(_,dets))
+    goDec (Right name,(_,_,dets))
       | Just mod <- nameModule_maybe name
       , mod == smdl
       , occ  <- nameOccName name
@@ -235,17 +234,17 @@ genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
     goDecl (RecField _ sp) = sp
     goDecl _ = Nothing
 
-genDefRow :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> [DefRow]
+genDefRow :: FilePath -> Module -> RefMap2 a -> [DefRow]
 genDefRow path smod refmap = genRows $ M.toList refmap
   where
     genRows = mapMaybe go
     getSpan name dets
       | RealSrcSpan sp _ <- nameSrcSpan name = Just sp
       | otherwise = do
-          (sp, _dets) <- find defSpan dets
+          (_, sp, _dets) <- find defSpan dets
           pure sp
 
-    defSpan = any isDef . identInfo . snd
+    defSpan (_, _, dets)= any isDef $ identInfo dets
     isDef (ValBind RegularBind _ _) = True
     isDef PatternBind{}             = True
     isDef Decl{}                    = True

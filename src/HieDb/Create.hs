@@ -37,7 +37,7 @@ import HieDb.Types
 import HieDb.Utils
 
 sCHEMA_VERSION :: Integer
-sCHEMA_VERSION = 8
+sCHEMA_VERSION = 9
 
 dB_VERSION :: Integer
 dB_VERSION = read (show sCHEMA_VERSION ++ "999" ++ show hieVersion)
@@ -117,6 +117,7 @@ initConn (getConn -> conn) = do
                 \, sc   INTEGER NOT NULL \
                 \, el   INTEGER NOT NULL \
                 \, ec   INTEGER NOT NULL \
+                \, is_generated BOOLEAN NOT NULL \
                 \, FOREIGN KEY(hieFile) REFERENCES mods(hieFile) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED \
                 \)"
   execute_ conn "CREATE INDEX IF NOT EXISTS refs_mod ON refs(hieFile)"
@@ -331,7 +332,7 @@ addRefsFromLoaded_unsafe
       mod    = moduleName smod
       uid    = moduleUnit smod
       smod   = hie_module hf
-      refmap = generateReferencesMap $ getAsts $ hie_asts hf
+      refmap = generateReferencesMap2 $ getAsts $ hie_asts hf
       (srcFile, isReal) = case sourceFile of
         RealFile f -> (Just f, True)
         FakeFile mf -> (mf, False)
@@ -339,10 +340,10 @@ addRefsFromLoaded_unsafe
 
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
-  let AstInfo rows decls imports = genAstInfo path smod refmap
+  let AstInfo refs decls imports = genAstInfo path smod refmap
 
   unless (skipRefs skipOptions) $
-    executeMany conn "INSERT INTO refs  VALUES (?,?,?,?,?,?,?,?)" rows
+    executeMany conn "INSERT INTO refs VALUES (?,?,?,?,?,?,?,?,?)" refs
   unless (skipDecls skipOptions) $
     executeMany conn "INSERT INTO decls VALUES (?,?,?,?,?,?,?)" decls
   unless (skipImports skipOptions) $
@@ -350,8 +351,7 @@ addRefsFromLoaded_unsafe
 
   let defs = genDefRow path smod refmap
   unless (skipDefs skipOptions) $
-    forM_ defs $ \def ->
-      execute conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" def
+    executeMany conn "INSERT INTO defs VALUES (?,?,?,?,?,?)" defs
 
   let exports = generateExports path $ hie_exports hf
   unless (skipExports skipOptions) $
