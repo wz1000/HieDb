@@ -1,5 +1,9 @@
 # Revision history for hiedb
 
+## 0.6.0.2
+
+* Bump base and ghc version bounds to support GHC 9.12
+
 ## 0.6.0.1
 
 * Bump base and ghc version bounds to support GHC 9.10
