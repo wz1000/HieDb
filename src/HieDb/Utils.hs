@@ -179,18 +179,18 @@ instance Semigroup AstInfo where
 instance Monoid AstInfo where
   mempty = AstInfo [] [] []
 
-genAstInfo :: FilePath -> Module -> M.Map Identifier [(Span, IdentifierDetails a)] -> AstInfo
-genAstInfo path smdl refmap = genRows $ flat $ M.toList refmap
+genAstInfo :: FilePath -> Module -> NodeOrigin -> M.Map Identifier [(Span, IdentifierDetails a)] -> AstInfo
+genAstInfo path smdl nodeOrigin refmap = genRows $ flat $ M.toList refmap
   where
+    isGenerated = nodeOrigin == GeneratedInfo
     flat = concatMap (\(a,xs) -> map (a,) xs)
-    genRows = foldMap go
-    go = mkAstInfo
+    genRows = foldMap mkAstInfo
 
     mkAstInfo x = AstInfo (maybeToList $ goRef x) (maybeToList $ goDec x) (maybeToList $ goImport x)
 
     goRef (Right name, (sp,_))
       | Just mod <- nameModule_maybe name = Just $
-          RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec
+          RefRow path occ (moduleName mod) (moduleUnit mod) sl sc el ec isGenerated
           where
             occ = nameOccName name
             sl = srcSpanStartLine sp
