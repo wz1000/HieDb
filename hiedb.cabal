@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                hiedb
-version:             0.6.0.1
+version:             0.6.0.2
 synopsis:            Generates a references DB from .hie files
 description:         Tool and library to index and query a collection of `.hie` files
 bug-reports:         https://github.com/wz1000/HieDb/issues
@@ -19,9 +19,10 @@ extra-source-files:
 tested-with:         GHC ==9.0.2
                       || ==9.2.8
                       || ==9.4.8
-                      || ==9.6.5
-                      || ==9.8.2
+                      || ==9.6.7
+                      || ==9.8.4
                       || ==9.10.1
+                      || ==9.12.2
 
 source-repository head
   type: git
@@ -29,7 +30,7 @@ source-repository head
 
 common common-options
   default-language:    Haskell2010
-  build-depends:       base >= 4.12 && < 4.21
+  build-depends:       base >= 4.12 && < 4.22
   ghc-options:         -Wall
                        -Wcompat
                        -Widentities
@@ -60,7 +61,7 @@ library
                        HieDb.Dump,
                        HieDb.Html,
                        HieDb.Run
-  build-depends:       ghc >= 8.6 && < 9.11
+  build-depends:       ghc >= 8.6 && < 9.13
                      , array
                      , containers
                      , filepath
