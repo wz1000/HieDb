@@ -331,11 +331,19 @@ addRefsFromLoaded_unsafe
       mod    = moduleName smod
       uid    = moduleUnit smod
       smod   = hie_module hf
-      refmap = generateReferencesMap $ getAsts $ hie_asts hf
+      refmap = generateReferencesMap $ fmap dropGeneratedInfo $ getAsts $ hie_asts hf
       (srcFile, isReal) = case sourceFile of
         RealFile f -> (Just f, True)
         FakeFile mf -> (mf, False)
       modrow = HieModuleRow path (ModuleInfo mod uid isBoot srcFile isReal hash)
+
+      -- We only want to index references to things that actually occur in source code
+      -- (i.e. NodeOrigin is SourceInfo, not GeneratedInfo).
+      -- So before generating RefMap we drop all GeneratedInfo from the AST.
+      dropGeneratedInfo :: HieAST a -> HieAST a
+      dropGeneratedInfo (Node (SourcedNodeInfo sniMap) sp children) =
+        let sourceOnlyNodeInfo = SourcedNodeInfo $ M.delete GeneratedInfo sniMap
+        in Node sourceOnlyNodeInfo sp (map dropGeneratedInfo children)
 
   execute conn "INSERT INTO mods VALUES (?,?,?,?,?,?,?)" modrow
 
