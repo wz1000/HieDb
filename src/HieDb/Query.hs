@@ -5,7 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module HieDb.Query where
 
-import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, vertexSet, vertices, overlay)
+import           Algebra.Graph.AdjacencyMap (AdjacencyMap, adjacencyMap, edges, induce, vertexSet, vertices, overlay)
 import           Algebra.Graph.Export.Dot hiding ((:=))
 import qualified Algebra.Graph.Export.Dot as G
 
@@ -15,13 +15,14 @@ import           Compat.HieTypes
 import           System.Directory
 import           System.FilePath
 
-import           Control.Monad (foldM, forM_)
+import           Control.Monad (foldM, forM_, guard)
 import           Control.Monad.IO.Class
 
 import           Data.List (foldl', intercalate)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import           Data.Maybe (mapMaybe)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -140,12 +141,7 @@ findDef conn occ mn uid
                               [":occ" := occ,":mod" := mn, ":unit" := uid]
 
 findOneDef :: HieDb -> OccName -> Maybe ModuleName -> Maybe Unit -> IO (Either HieDbErr (Res DefRow))
-findOneDef conn occ mn muid = wrap <$> findDef conn occ mn muid
-  where
-    wrap [x]    = Right x
-    wrap []     = Left $ NameNotFound occ mn muid
-    wrap (x:xs) = Left $ AmbiguousUnitId (defUnit x :| map defUnit xs)
-    defUnit (_:.i) = i
+findOneDef = findOneVia . findDef
 
 searchDef :: HieDb -> String -> IO [Res DefRow]
 searchDef conn cs
@@ -153,6 +149,30 @@ searchDef conn cs
                          \FROM defs JOIN mods USING (hieFile) \
                          \WHERE occ LIKE ? \
                          \LIMIT 200" (Only $ '_':':':cs++"%")
+
+findDecl :: HieDb -> OccName -> Maybe ModuleName -> Maybe Unit -> IO [Res DeclRow]
+findDecl conn occ mn uid
+  = queryNamed (getConn conn) "SELECT decls.*, mods.mod,mods.unit,mods.is_boot,mods.hs_src,mods.is_real,mods.hash \
+                              \FROM decls JOIN mods USING (hieFile) \
+                              \WHERE occ = :occ AND (:mod IS NULL OR mod = :mod) AND (:unit IS NULL OR unit = :unit)"
+                              [":occ" := occ,":mod" := mn, ":unit" := uid]
+
+findOneDecl :: HieDb -> OccName -> Maybe ModuleName -> Maybe Unit -> IO (Either HieDbErr (Res DeclRow))
+findOneDecl = findOneVia . findDecl
+
+findOneVia
+  :: Functor f
+  => (OccName -> Maybe ModuleName -> Maybe Unit -> f [Res a])
+  -> OccName
+  -> Maybe ModuleName
+  -> Maybe Unit
+  -> f (Either HieDbErr (Res a))
+findOneVia f occ mn muid = wrap <$> f occ mn muid
+  where
+    wrap [x]    = Right x
+    wrap []     = Left $ NameNotFound occ mn muid
+    wrap (x:xs) = Left $ AmbiguousUnitId (declUnit x :| map declUnit xs)
+    declUnit (_:.i) = i
 
 {-| @withTarget db t f@ runs function @f@ with HieFile specified by HieTarget @t@.
 In case the target is given by ModuleName (and optionally Unit) it is first resolved
@@ -184,8 +204,27 @@ withTarget conn target f = case target of
 
 type Vertex = (String, String, String, Int, Int, Int, Int)
 
-declRefs :: HieDb -> IO ()
-declRefs db = do
+-- | Find a @'Res' 'DeclRow'@ by name and return it as a 'Vertex'
+lookupVertex :: HieDb -> OccName -> Maybe ModuleName -> Maybe Unit -> IO (Either HieDbErr Vertex)
+lookupVertex db occ mm muid =
+  fmap declRowToVertex <$> findOneDecl db occ mm muid
+ where
+  declRowToVertex :: Res DeclRow -> Vertex
+  declRowToVertex (dr :. mi) =
+    ( moduleNameString $ modInfoName mi
+    , declSrc dr
+    , occNameToField $ declNameOcc dr
+    , declSLine dr
+    , declSCol dr
+    , declELine dr
+    , declECol dr
+    )
+
+  occNameToField :: OccName -> String
+  occNameToField occ = toNsChar (occNameSpace occ) ++ occNameString occ
+
+declRefs :: HieDb -> Maybe Vertex -> IO ()
+declRefs db mv = do
   graph <- getGraph db
   writeFile
     "refs.dot"
@@ -197,8 +236,27 @@ declRefs db = do
               ]
           }
         )
-        graph
+        (maybe id pruneToCallersOf mv graph)
     )
+
+pruneToCallersOf :: Vertex -> AdjacencyMap Vertex -> AdjacencyMap Vertex
+pruneToCallersOf v g = induce (`elem` vs) g
+ where
+  vs = loop v
+
+  loop :: Vertex -> [Vertex]
+  loop x =
+      let vs = mapMaybe
+                (\(callee, callers) -> do
+                    guard $ x `Set.member` callers
+                    pure callee
+                )
+                $ Map.toList
+                $ adjacencyMap g
+
+      in if null vs
+        then vs -- done
+        else x : vs <> concatMap loop vs -- recur
 
 getGraph :: HieDb -> IO (AdjacencyMap Vertex)
 getGraph (getConn -> conn) = do
