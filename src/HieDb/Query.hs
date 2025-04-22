@@ -18,7 +18,7 @@ import           System.FilePath
 import           Control.Monad (foldM, forM_, guard)
 import           Control.Monad.IO.Class
 
-import           Data.List (foldl', intercalate)
+import           Data.List (delete, foldl', intercalate)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -246,13 +246,14 @@ pruneToCallersOf v g = induce (`elem` vs) g
 
   loop :: Vertex -> [Vertex]
   loop x =
-      let vs = mapMaybe
-                (\(callee, callers) -> do
-                    guard $ x `Set.member` callers
-                    pure callee
-                )
-                $ Map.toList
-                $ adjacencyMap g
+      let vs = delete x
+                 $ mapMaybe
+                   (\(callee, callers) -> do
+                       guard $ x `Set.member` callers
+                       pure callee
+                   )
+                 $ Map.toList
+                 $ adjacencyMap g
 
       in if null vs
         then vs -- done
