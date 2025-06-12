@@ -1,13 +1,15 @@
 {-# LANGUAGE CPP #-}
 module Main where
 
+import qualified Algebra.Graph.AdjacencyMap as AdjacencyMap
+import Data.Bifunctor (bimap)
 import GHC.Paths (libdir, ghc)
 import HieDb (HieDb, HieModuleRow (..), LibDir (..), ModuleInfo (..), withHieDb, withHieFile, addRefsFromLoaded, deleteMissingRealFiles, defaultSkipOptions)
-import HieDb.Query (getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFileFromSource)
+import HieDb.Query (Vertex, getAllIndexedMods, lookupHieFile, resolveUnitId, lookupHieFileFromSource, lookupVertex, getGraph, pruneToCallersOf)
 import HieDb.Run (Command (..), Options (..), runCommand)
 import HieDb.Types (HieDbErr (..), SourceFile(..), runDbM)
 import HieDb.Utils (makeNc)
-import HieDb.Compat (stringToUnit, moduleNameString, mkModuleName, getFileHash)
+import HieDb.Compat (stringToUnit, moduleNameString, mkModuleName, getFileHash, mkOccName, varName)
 import System.Directory (findExecutable, getCurrentDirectory, removeDirectoryRecursive)
 import System.Exit (ExitCode (..), die)
 import System.FilePath ((</>))
@@ -124,6 +126,29 @@ apiSpec = describe "api" $
             -- Check that the other modules are still indexed
             afterMods <- getAllIndexedMods conn
             originalMods `shouldBe` afterMods
+
+        describe "pruneToCallersOf" $ do
+          it "prunes the graph to recursive callers of an identifier" $ \conn -> do
+            result <- lookupVertex conn (mkOccName varName "showInt") Nothing Nothing
+
+            case result of
+              Left _ -> fail "Failed to lookup vertex for v:showInt"
+              Right v -> do
+                g <- getGraph conn
+
+                let
+                  renderFn :: Vertex -> String
+                  renderFn (modName, _, fnName, _, _, _, _) = modName <> "." <> fnName
+
+                  callers =
+                      map (bimap renderFn (map renderFn))
+                        $ AdjacencyMap.adjacencyList
+                        $ pruneToCallersOf v g
+
+                callers `shouldBe`
+                  [ ("Module1.v:function2", ["Sub.Module2.v:showInt"])
+                  , ("Sub.Module2.v:showInt", [])
+                  ]
 
 cliSpec :: Spec
 cliSpec =

@@ -37,6 +37,7 @@ import Data.Either
 import Data.Foldable
 import Data.IORef
 import Data.List.Extra
+import Data.Traversable (for)
 
 import Numeric.Natural
 
@@ -101,7 +102,7 @@ data Command
   | TypesAtPoint HieTarget (Int,Int) (Maybe (Int,Int))
   | DefsAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
   | InfoAtPoint  HieTarget (Int,Int) (Maybe (Int,Int))
-  | RefGraph
+  | RefGraph (Maybe String) (Maybe ModuleName) (Maybe Unit)
   | Dump FilePath
   | Reachable [Symbol]
   | Unreachable [Symbol]
@@ -205,7 +206,10 @@ cmdParser
                             <*> posParser 'S'
                             <*> optional (posParser 'E'))
               $ progDesc "Print name, module name, unit id for symbol at point/span")
-  <> command "ref-graph" (info (pure RefGraph) $ progDesc "Generate a reachability graph")
+  <> command "ref-graph" (info (RefGraph <$> optional (strArgument (metavar "NAME"))
+                                         <*> optional moduleNameParser
+                                         <*> maybeUnitId)
+                         $ progDesc "Generate a reachability graph")
   <> command "dump" (info (Dump <$> strArgument (metavar "HIE")) $ progDesc "Dump a HIE AST")
   <> command "reachable" (info (Reachable <$> some symbolParser)
                          $ progDesc "Find all symbols reachable from the given symbols")
@@ -429,7 +433,11 @@ runCommand libdir opts cmd = withHieDbAndFlags libdir (database opts) $ \dynFlag
     InfoAtPoint target sp mep -> hieFileCommand conn opts target $ \hf -> do
       mapM_ (uncurry $ printInfo dynFlags) $ pointCommand hf sp mep $ \ast ->
         (hieTypeToIface . flip recoverFullType (hie_types hf) <$> nodeInfo' ast, nodeSpan ast)
-    RefGraph -> declRefs conn
+    RefGraph mname mm muid -> do
+      mv <- for mname $ \n -> do
+        let ns = if isCons n then dataName else varName
+        reportAmbiguousErr opts =<< lookupVertex conn (mkOccName ns n) mm muid
+      declRefs conn mv
     Dump path -> do
       nc <- newIORef =<< makeNc
       runDbM nc $ dump dynFlags path
