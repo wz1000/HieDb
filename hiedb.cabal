@@ -92,3 +92,4 @@ test-suite hiedb-tests
                     , hspec
                     , process
                     , temporary
+                    , algebraic-graphs
