@@ -5,7 +5,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module HieDb.Query where
 
-import           Algebra.Graph.AdjacencyMap (AdjacencyMap, adjacencyMap, edges, induce, vertexSet, vertices, overlay)
+import           Algebra.Graph.AdjacencyMap (AdjacencyMap, adjacencyMap, edges, induce, vertexSet, vertices, overlay, transpose)
+import           Algebra.Graph.AdjacencyMap.Algorithm (reachable)
 import           Algebra.Graph.Export.Dot hiding ((:=))
 import qualified Algebra.Graph.Export.Dot as G
 
@@ -15,14 +16,13 @@ import           Compat.HieTypes
 import           System.Directory
 import           System.FilePath
 
-import           Control.Monad (foldM, forM_, guard)
+import           Control.Monad (foldM, forM_)
 import           Control.Monad.IO.Class
 
-import           Data.List (delete, foldl', intercalate)
+import           Data.List (foldl', intercalate)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import           Data.Maybe (mapMaybe)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -242,22 +242,7 @@ declRefs db mv = do
 pruneToCallersOf :: Vertex -> AdjacencyMap Vertex -> AdjacencyMap Vertex
 pruneToCallersOf v g = induce (`elem` vs) g
  where
-  vs = loop v
-
-  loop :: Vertex -> [Vertex]
-  loop x =
-      let vs = delete x
-                 $ mapMaybe
-                   (\(callee, callers) -> do
-                       guard $ x `Set.member` callers
-                       pure callee
-                   )
-                 $ Map.toList
-                 $ adjacencyMap g
-
-      in if null vs
-        then vs -- done
-        else x : vs <> concatMap loop vs -- recur
+  vs = reachable (transpose g) v
 
 getGraph :: HieDb -> IO (AdjacencyMap Vertex)
 getGraph (getConn -> conn) = do
