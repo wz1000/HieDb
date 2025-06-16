@@ -5,7 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module HieDb.Query where
 
-import           Algebra.Graph.AdjacencyMap (AdjacencyMap, adjacencyMap, edges, induce, vertexSet, vertices, overlay, transpose)
+import           Algebra.Graph.AdjacencyMap (AdjacencyMap, edges, induce, vertexSet, vertices, overlay, transpose)
 import           Algebra.Graph.AdjacencyMap.Algorithm (reachable)
 import           Algebra.Graph.Export.Dot hiding ((:=))
 import qualified Algebra.Graph.Export.Dot as G
