@@ -42,6 +42,7 @@ import qualified Data.IntMap.Strict as IMap
 import Data.IntMap.Strict (IntMap)
 import Data.IntSet (IntSet)
 import Control.Monad (guard, unless)
+import GHC.Builtin.Utils
 
 #if __GLASGOW_HASKELL__ >= 903
 import Control.Concurrent.MVar (readMVar)
@@ -94,10 +95,10 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 makeNc :: IO NameCache
 makeNc = do
 #if __GLASGOW_HASKELL__ >= 903
-  initNameCache 'z' []
+  initNameCache 'z' knownKeyNames
 #else
   uniq_supply <- mkSplitUniqSupply 'z'
-  return $ initNameCache uniq_supply []
+  return $ initNameCache uniq_supply knownKeyNames
 #endif
 
 -- | Recursively search for @.hie@ and @.hie-boot@  files in given directory
