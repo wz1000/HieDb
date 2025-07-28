@@ -95,9 +95,9 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
 makeNc :: IO NameCache
 makeNc = do
 #if __GLASGOW_HASKELL__ >= 903
-  initNameCache 'z' knownKeyNames
+  initNameCache 'r' knownKeyNames
 #else
-  uniq_supply <- mkSplitUniqSupply 'z'
+  uniq_supply <- mkSplitUniqSupply 'r'
   return $ initNameCache uniq_supply knownKeyNames
 #endif
 
