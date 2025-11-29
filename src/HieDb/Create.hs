@@ -111,6 +111,7 @@ setupHieDb conn = do
   execute_ conn "PRAGMA busy_timeout = 500;"
   execute_ conn "PRAGMA journal_mode = WAL;"
   execute_ conn "PRAGMA foreign_keys = ON;"
+  execute_ conn "PRAGMA synchronous = NORMAL;"
   execute_ conn "PRAGMA defer_foreign_keys = ON;"
 
   execute_ conn "CREATE TABLE IF NOT EXISTS mods \
