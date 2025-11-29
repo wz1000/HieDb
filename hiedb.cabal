@@ -66,6 +66,7 @@ library
                      , containers
                      , filepath
                      , directory
+                     , direct-sqlite
                      , mtl
                      , sqlite-simple
                      , hie-compat ^>= 0.3

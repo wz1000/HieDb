@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE TypeApplications #-}
 module HieDb.Types where
 
 import Prelude hiding (mod)
@@ -31,8 +32,45 @@ import Database.SQLite.Simple.FromField
 import qualified Text.ParserCombinators.ReadP as R
 
 import HieDb.Compat
+import qualified Database.SQLite3 as Direct
+import Control.Monad (void)
 
-newtype HieDb = HieDb { getConn :: Connection }
+data HieDb = HieDb
+  { getConn :: !Connection
+  , insertModsStatement :: !(StatementFor HieModuleRow)
+  , insertRefsStatement :: !(StatementFor RefRow)
+  , insertDeclsStatement :: !(StatementFor DeclRow)
+  , insertImportsStatement :: !(StatementFor ImportRow)
+  , insertDefsStatement :: !(StatementFor DefRow)
+  , insertExportsStatement :: !(StatementFor ExportRow)
+  , insertTyperefsStatement :: !(StatementFor TypeRef)
+  , insertTypenamesStatement :: !(StatementFor (OccName, ModuleName, Unit))
+  , queryTypenamesStatement :: !(StatementFor (OccName, ModuleName, Unit))
+  , deleteInternalTablesStatement :: !(Only FilePath -> IO ())
+  }
+
+newtype StatementFor a = StatementFor Statement
+
+data NoOutput = NoOutput
+
+instance FromRow NoOutput where
+  fromRow = pure NoOutput
+
+runStatementFor_ :: ToRow a => StatementFor a -> a -> IO ()
+{-# INLINE runStatementFor_ #-}
+runStatementFor_ (StatementFor statement@(Statement s)) params = do
+  Direct.bind s (toRow params)
+    *> void (nextRow @NoOutput statement)
+    *> reset statement
+    *> Direct.clearBindings s
+
+runStatementFor :: (ToRow a, FromRow b) => StatementFor a -> a -> IO (Maybe b)
+{-# INLINE runStatementFor #-}
+runStatementFor (StatementFor statement@(Statement s)) params = do
+  Direct.bind s (toRow params)
+    *> nextRow statement
+    <* reset statement
+    <* Direct.clearBindings s
 
 data HieDbException
   = IncompatibleSchemaVersion
