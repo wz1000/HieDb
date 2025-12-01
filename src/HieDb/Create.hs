@@ -106,6 +106,12 @@ withHieDbAndFlags libdir fp f = runContT (withHieDb' fp) $ \hiedb -> do
 
 {-| Initialize database schema for given 'HieDb'.
 -}
+initConn :: HieDb -> IO ()
+{-# DEPRECATED initConn "Use setupHieDb instead." #-}
+initConn = setupHieDb . getConn
+
+{-| Initialize database schema for given 'HieDb'.
+-}
 setupHieDb :: Connection -> IO ()
 setupHieDb conn = do
   execute_ conn "PRAGMA busy_timeout = 500;"
@@ -454,3 +460,12 @@ garbageCollectTypeNames (getConn -> conn) = do
   execute_ conn "DELETE FROM typenames WHERE NOT EXISTS ( SELECT 1 FROM typerefs WHERE typerefs.id = typenames.id LIMIT 1 )"
   execute_ conn "PRAGMA optimize;"
   changes conn
+
+deleteInternalTables :: Connection -> FilePath -> IO ()
+deleteInternalTables conn path = do
+  execute conn "DELETE FROM refs  WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM decls WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM defs  WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM typerefs WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM mods  WHERE hieFile = ?" (Only path)
+  execute conn "DELETE FROM exports WHERE hieFile = ?" (Only path)
