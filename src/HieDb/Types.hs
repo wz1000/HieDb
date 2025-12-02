@@ -32,7 +32,6 @@ import Database.SQLite.Simple.FromField
 import qualified Text.ParserCombinators.ReadP as R
 
 import HieDb.Compat
-import qualified Database.SQLite3 as Direct
 import Control.Monad (void)
 
 data HieDb = HieDb
@@ -58,19 +57,15 @@ instance FromRow NoOutput where
 
 runStatementFor_ :: ToRow a => StatementFor a -> a -> IO ()
 {-# INLINE runStatementFor_ #-}
-runStatementFor_ (StatementFor statement@(Statement s)) params = do
-  bind statement (toRow params)
-    *> void (nextRow @NoOutput statement)
-    *> reset statement
-    *> Direct.clearBindings s
+runStatementFor_ (StatementFor statement) params = do
+  withBind statement params $
+    void (nextRow @NoOutput statement)
 
 runStatementFor :: (ToRow a, FromRow b) => StatementFor a -> a -> IO (Maybe b)
 {-# INLINE runStatementFor #-}
-runStatementFor (StatementFor statement@(Statement s)) params = do
-  bind statement (toRow params)
-    *> nextRow statement
-    <* reset statement
-    <* Direct.clearBindings s
+runStatementFor (StatementFor statement) params = do
+  withBind statement params $
+    nextRow statement
 
 data HieDbException
   = IncompatibleSchemaVersion
