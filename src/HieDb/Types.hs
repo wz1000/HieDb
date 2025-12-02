@@ -59,7 +59,7 @@ instance FromRow NoOutput where
 runStatementFor_ :: ToRow a => StatementFor a -> a -> IO ()
 {-# INLINE runStatementFor_ #-}
 runStatementFor_ (StatementFor statement@(Statement s)) params = do
-  Direct.bind s (toRow params)
+  bind statement (toRow params)
     *> void (nextRow @NoOutput statement)
     *> reset statement
     *> Direct.clearBindings s
@@ -67,7 +67,7 @@ runStatementFor_ (StatementFor statement@(Statement s)) params = do
 runStatementFor :: (ToRow a, FromRow b) => StatementFor a -> a -> IO (Maybe b)
 {-# INLINE runStatementFor #-}
 runStatementFor (StatementFor statement@(Statement s)) params = do
-  Direct.bind s (toRow params)
+  bind statement (toRow params)
     *> nextRow statement
     <* reset statement
     <* Direct.clearBindings s
