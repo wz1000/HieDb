@@ -62,9 +62,8 @@ checkVersion k db@(getConn -> conn) = do
   else
     throwIO $ IncompatibleSchemaVersion dB_VERSION ver
 
-withHieDb' :: FilePath -> ContT a IO HieDb
-withHieDb' fp = do
-  connection <- ContT $ withConnection fp
+withHieDb' :: FilePath -> (HieDb -> IO a) -> IO a
+withHieDb' fp act = withConnection fp $ \connection -> do
   liftIO $ setupHieDb connection
   let createStatement t = fmap StatementFor (ContT (withStatement connection t))
       deleteInternalTables = do
@@ -78,7 +77,7 @@ withHieDb' fp = do
             , "DELETE FROM exports WHERE hieFile = ?"
             ]
         pure $ \fp -> mapM_ (`runStatementFor_` fp) deletions
-  HieDb connection
+  flip runContT act $ HieDb connection
     <$> createStatement "INSERT INTO mods VALUES (?,?,?,?,?,?,?)"
     <*> createStatement "INSERT INTO refs VALUES (?,?,?,?,?,?,?,?,?)"
     <*> createStatement "INSERT INTO decls VALUES (?,?,?,?,?,?,?)"
@@ -92,7 +91,7 @@ withHieDb' fp = do
 
 {-| Given path to @.hiedb@ file, constructs 'HieDb' and passes it to given function. -}
 withHieDb :: FilePath -> (HieDb -> IO a) -> IO a
-withHieDb fp f = runContT (withHieDb' fp) $ \hiedb -> do
+withHieDb fp f = withHieDb' fp $ \hiedb -> do
   checkVersion f hiedb
 
 {-| Given GHC LibDir and path to @.hiedb@ file,
@@ -100,7 +99,7 @@ constructs DynFlags (required for printing info from @.hie@ files)
 and 'HieDb' and passes them to given function.
 -}
 withHieDbAndFlags :: LibDir -> FilePath -> (DynFlags -> HieDb -> IO a) -> IO a
-withHieDbAndFlags libdir fp f = runContT (withHieDb' fp) $ \hiedb -> do
+withHieDbAndFlags libdir fp f = withHieDb' fp $ \hiedb -> do
   dynFlags <- dynFlagsForPrinting libdir
   f dynFlags hiedb
 
