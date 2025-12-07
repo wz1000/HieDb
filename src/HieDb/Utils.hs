@@ -74,7 +74,7 @@ addTypeRef hiedb hf arr ixs sp = go 0
           indexed <- get
           let isTypeIndexed = ISet.member (fromIntegral occ) (IMap.findWithDefault ISet.empty depth indexed)
           unless isTypeIndexed $ do
-            liftIO $ runStatementFor_ (insertTyperefsStatement hiedb) ref
+            liftIO $ runStatementFor_ (insertTyperefsStatement (preparedStatements hiedb)) ref
             put $ IMap.alter (\case
                   Nothing -> Just $ ISet.singleton (fromIntegral occ)
                   Just s -> Just $ ISet.insert (fromIntegral occ) s
