@@ -62,7 +62,9 @@ checkVersion k db@(getConn -> conn) = do
   else
     throwIO $ IncompatibleSchemaVersion dB_VERSION ver
 
--- | Commmon implementation for the @withHieDb*@ functions that
+-- | Commmon implementation for the @withHieDb*@ functions that prepared the
+-- hiedb file, if it didn't already exist. Also prepares any statements that
+-- we'll need to do indexing.
 withHieDbImpl :: FilePath -> (HieDb -> IO a) -> IO a
 withHieDbImpl fp act = withConnection fp $ \connection -> do
   liftIO $ setupHieDb connection
