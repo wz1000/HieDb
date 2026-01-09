@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE TypeApplications #-}
 module HieDb.Types where
 
 import Prelude hiding (mod)
@@ -16,9 +17,11 @@ import Data.IORef
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
+import Control.Exception
+import Control.Monad (void)
+import Control.Monad.Cont (ContT(..))
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Control.Exception
 
 import Data.List.NonEmpty (NonEmpty(..))
 
@@ -32,7 +35,81 @@ import qualified Text.ParserCombinators.ReadP as R
 
 import HieDb.Compat
 
-newtype HieDb = HieDb { getConn :: Connection }
+data HieDb = HieDb
+  { getConn :: !Connection
+  , preparedStatements :: HieDbStatements
+  }
+
+-- | Record of prepared statements that are relevant during the slowest
+-- operation, indexing.
+--
+-- See benchmarks in https://github.com/wz1000/HieDb/pull/86, where statement
+-- preparation results in a ~28% improvement in indexing hie files generated
+-- from HLS.
+data HieDbStatements = HieDbStatements
+  { insertModsStatement :: !(StatementFor HieModuleRow)
+  , insertRefsStatement :: !(StatementFor RefRow)
+  , insertDeclsStatement :: !(StatementFor DeclRow)
+  , insertImportsStatement :: !(StatementFor ImportRow)
+  , insertDefsStatement :: !(StatementFor DefRow)
+  , insertExportsStatement :: !(StatementFor ExportRow)
+  , insertTyperefsStatement :: !(StatementFor TypeRef)
+  , insertTypenamesStatement :: !(StatementFor (OccName, ModuleName, Unit))
+  , queryTypenamesStatement :: !(StatementFor (OccName, ModuleName, Unit))
+  , deleteInternalTablesStatement :: !(Only FilePath -> IO ())
+  }
+
+-- | A type-safe wrapper connecting the query preparation with the datatype the
+-- query is intended for. The type variable 'a' should correspond to the
+-- datatype that will be bound to the statement that is wrapped.
+newtype StatementFor a = StatementFor Statement
+
+-- | Equivalent to unit so we can avoid parsing anything when doing insertions.
+--
+-- Many of our indexing operations are just simple inserts that don't return
+-- results. We can't use the array of @sqlite-simple.execute@ functions as they
+-- can't make use of the statements we've prepared.
+data NoOutput = NoOutput
+
+instance FromRow NoOutput where
+  fromRow = pure NoOutput
+
+-- | Helper for preparing multiple statements, each of which has to be
+-- bracket-wrapped. Done via ContT, so we can use do/applicative notation.
+createStatement :: Connection -> Query -> ContT r IO (StatementFor a)
+createStatement connection query = fmap StatementFor (ContT (withStatement connection query))
+
+-- | Run a statement that was built for an datatype in mind, ensuring that we do
+-- indeed pass that datatype.
+--
+-- This function is preferably inlined so it'd get specialized with the datatype
+-- encoder.
+runStatementFor_ :: ToRow a => StatementFor a -> a -> IO ()
+{-# INLINE runStatementFor_ #-}
+runStatementFor_ (StatementFor statement) params = do
+  withBind statement params $
+    -- sqlite-simple doesn't offer the best interface for executing prepared
+    -- insertions. `nextRow` requires a hint to know what it needs to parse if it
+    -- encounters content from sqlite. Though this code path isn't hit as our
+    -- insertions don't return anything, we still need to provide a parsable
+    -- datatype. Bit of a leaky abstraction, can be cleaned up by using the
+    -- lower-level `direct-sqlite` instead.
+    void (nextRow @NoOutput statement)
+
+-- | Run a statement that was built for an datatype in mind, ensuring that we do
+-- indeed pass that datatype.
+--
+-- This function is preferably inlined so it'd get specialized with the datatype
+-- encoder.
+--
+-- NB: While the input variable acts as a witness and is carried around, the
+-- output variable is unconstrained. When using this function, double check that
+-- the output type is what you expect it to be.
+runStatementFor :: (ToRow a, FromRow b) => StatementFor a -> a -> IO (Maybe b)
+{-# INLINE runStatementFor #-}
+runStatementFor (StatementFor statement) params = do
+  withBind statement params $
+    nextRow statement
 
 data HieDbException
   = IncompatibleSchemaVersion

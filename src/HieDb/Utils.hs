@@ -35,7 +35,6 @@ import Data.IORef
 
 import HieDb.Types
 import HieDb.Compat
-import Database.SQLite.Simple
 import Control.Monad.State.Strict (StateT, get, put)
 import qualified Data.IntSet as ISet
 import qualified Data.IntMap.Strict as IMap
@@ -60,7 +59,7 @@ import Control.Concurrent.MVar (readMVar)
 type TypeIndexing a = StateT (IntMap IntSet) IO a
 
 addTypeRef :: HieDb -> FilePath -> A.Array TypeIndex HieTypeFlat -> A.Array TypeIndex (Maybe Int64) -> RealSrcSpan -> TypeIndex -> TypeIndexing ()
-addTypeRef (getConn -> conn) hf arr ixs sp = go 0
+addTypeRef hiedb hf arr ixs sp = go 0
   where
     sl = srcSpanStartLine sp
     sc = srcSpanStartCol sp
@@ -75,7 +74,7 @@ addTypeRef (getConn -> conn) hf arr ixs sp = go 0
           indexed <- get
           let isTypeIndexed = ISet.member (fromIntegral occ) (IMap.findWithDefault ISet.empty depth indexed)
           unless isTypeIndexed $ do
-            liftIO $ execute conn "INSERT INTO typerefs VALUES (?,?,?,?,?,?,?)" ref
+            liftIO $ runStatementFor_ (insertTyperefsStatement (preparedStatements hiedb)) ref
             put $ IMap.alter (\case
                   Nothing -> Just $ ISet.singleton (fromIntegral occ)
                   Just s -> Just $ ISet.insert (fromIntegral occ) s
