@@ -241,7 +241,11 @@ cliSpec =
             [ "Span: test/data/Module1.hs:10:8-10"
             , "Constructors: {(HsVar, HsExpr)}"
             , "Identifiers:"
+#if MIN_VERSION_base(4,22,0)
+            , "Symbol:v:not:GHC.Internal.Classes:ghc-internal"
+#else
             , "Symbol:v:not:GHC.Classes:ghc-prim"
+#endif
             , "not defined at <no location info>"
             , "    Details:  Just Bool -> Bool {usage}"
             , "Types:"
