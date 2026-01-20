@@ -191,11 +191,6 @@ jobs:
           echo "    ghc-options: -Werror=incomplete-patterns -Werror=incomplete-uni-patterns" >> cabal.project
           cat >> cabal.project <<EOF
           allow-newer: hie-compat:base
-
-          source-repository-package
-            type:     git
-            location: https://github.com/snowleopard/alga
-            tag:      d4e43fb42db05413459fb2df493361d5a666588a
           EOF
           $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: any.$_ installed\n" unless /^(hiedb)$/; }' >> cabal.project.local
           cat cabal.project
