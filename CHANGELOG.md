@@ -1,5 +1,11 @@
 # Revision history for hiedb
 
+## 0.8.0.0
+
+* Bump base and ghc version bounds to support GHC 9.14
+* Use prepared statements to speedup SQLite indexing
+* Initialize name cache with known keys to prevent confusion with built in names (GHC #26055)
+
 ## 0.7.0.0
 
 * DB schema change: added new bool field `refs.is_generated` to distinguish between references coming from source code
