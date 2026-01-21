@@ -4,7 +4,7 @@
 
 * Bump base and ghc version bounds to support GHC 9.14
 * Use prepared statements to speedup SQLite indexing
-* Better way to initialize NameCache to avoid Uniq name clashes
+* Initialize name cache with known keys to prevent confusion with built in names (GHC #26055)
 
 ## 0.7.0.0
 
